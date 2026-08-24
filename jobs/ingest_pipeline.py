@@ -96,7 +96,22 @@ def _numerics(row):
 
 
 # ------------------------------------------------- two-path lever extraction
-def extract_deterministic(sheets: dict) -> dict:
+def _extra_labels(field_map):
+    """Label variants learned via the carrier template (field_map value 'Tab/Label|Alt1|Alt2').
+    Returns {logical_field: [lowercased label variants]} to augment FIELD_LABELS."""
+    out = {}
+    for field, anchor in (field_map or {}).items():
+        if not isinstance(anchor, str):
+            continue
+        label_part = anchor.split("/", 1)[-1]           # drop the "Tab/" prefix
+        variants = [v.strip().lower() for v in label_part.split("|") if v.strip()]
+        if variants:
+            out[field] = variants
+    return out
+
+
+def extract_deterministic(sheets: dict, extra=None) -> dict:
+    extra = extra or {}
     found = {}
     for exact in (True, False):
         for name, rows in sheets.items():
@@ -106,9 +121,10 @@ def extract_deterministic(sheets: dict) -> dict:
                 if not label or not nums:
                     continue
                 low = label.lower()
-                for field, variants in FIELD_LABELS.items():
+                for field, base in FIELD_LABELS.items():
                     if field in found:
                         continue
+                    variants = base + extra.get(field, [])
                     hit = any(low.startswith(v) for v in variants) if exact else any(v in low for v in variants)
                     if hit:
                         val = nums[-1] if field in PREFER_ANNUAL and len(nums) > 1 else nums[0]
@@ -142,7 +158,7 @@ def extract_ai(sheets: dict) -> dict:
               f"Return ONLY JSON. Keys to find (omit any not present): {schema}\n"
               f"Rules: percentages as decimals (11.75%->0.1175). For total_incurred_claims return the ANNUAL total. "
               f"credibility_experience_weight is the 0-1 weight on the experience increase. "
-              f"For each key return {{\"value\": <number>}}.\n\nEXHIBIT:\n{body}")
+              f"For each key return {{\"value\": <number>, \"label\": \"<the exact row label you read it from>\"}}.\n\nEXHIBIT:\n{body}")
     from openai import OpenAI
     from databricks.sdk.core import Config
     cfg = Config(profile=_PROF) if _PROF else Config()
@@ -155,7 +171,8 @@ def extract_ai(sheets: dict) -> dict:
     out = {}
     for k, v in json.loads(m.group(0)).items():
         if k in FIELD_LABELS or k == "credibility_experience_weight":
-            out[k] = {"value": v.get("value") if isinstance(v, dict) else v}
+            out[k] = {"value": v.get("value") if isinstance(v, dict) else v,
+                      "label": v.get("label") if isinstance(v, dict) else None}
     return out
 
 
@@ -177,7 +194,8 @@ def reconcile(det, ai):
             status = "ai-only"
         else:
             status = "missing"
-        rows.append({"field": f, "det": dv, "ai": av, "status": status})
+        rows.append({"field": f, "det": dv, "ai": av, "status": status,
+                     "det_label": det.get(f, {}).get("label"), "ai_label": ai.get(f, {}).get("label")})
     return rows, found, len(fields), disagreements
 
 
@@ -258,8 +276,10 @@ def identify(file_name: str) -> dict:
     stem = re.sub(r"\.xlsx$", "", base, flags=re.I)
     parts = stem.split("_")
     carrier_key = parts[0].lower() if parts else ""
-    tmpl = run(f"SELECT carrier, doc_family, expected_tabs, field_count FROM {FQ}.`0_carrier_template` "
-               f"WHERE lower(carrier) LIKE '{carrier_key}%'", "tmpl").result.data_array or []
+    # latest template version first, so a re-mapped (learned) template wins
+    tmpl = run(f"SELECT carrier, doc_family, expected_tabs, field_count, field_map, template_version "
+               f"FROM {FQ}.`0_carrier_template` WHERE lower(carrier) LIKE '{carrier_key}%' "
+               f"ORDER BY template_version DESC", "tmpl").result.data_array or []
     family = "monthly_claims" if "month" in stem.lower() else "renewal_exhibit"
     row = next((r for r in tmpl if r[1] == family), (tmpl[0] if tmpl else None))
     group = parts[1].title() if len(parts) > 1 else "Unknown"
@@ -267,9 +287,16 @@ def identify(file_name: str) -> dict:
     tabs = []
     if row and row[2]:
         tabs = json.loads(row[2]) if isinstance(row[2], str) else list(row[2])
+    fmap = {}
+    if row and row[4]:
+        try:
+            fmap = json.loads(row[4])
+        except Exception:  # noqa: BLE001
+            fmap = {}
     return {"carrier": row[0] if row else parts[0].title(), "group": "Harborview Logistics" if group.lower().startswith("harborview") else group,
             "period": period.upper(), "doc_family": family,
             "expected_tabs": tabs, "field_count": (int(row[3]) if row else 17),
+            "field_map": fmap, "template_version": (row[5] if row else "v1"),
             "known": row is not None}
 
 
@@ -301,7 +328,8 @@ def process_file(path: str, actor: str = "system") -> dict:
     # renewal exhibit: fingerprint + extract + reconcile
     present = set(sheets.keys())
     missing_tabs = [t for t in (meta["expected_tabs"] or []) if t not in present]
-    det = extract_deterministic(sheets)
+    fmap = meta.get("field_map") or {}
+    det = extract_deterministic(sheets, extra=_extra_labels(fmap))
     try:
         ai = extract_ai(sheets)
     except Exception as e:
@@ -309,9 +337,18 @@ def process_file(path: str, actor: str = "system") -> dict:
         print(f"  (AI path unavailable: {e}; deterministic only)")
     recon, found, expected, disagreements = reconcile(det, ai)
     core_ok = all(det.get(f, {}).get("value") is not None for f in CORE_FIELDS)
+
+    def _anchor_label(f):
+        a = fmap.get(f)
+        return a.split("/", 1)[-1].split("|")[0] if isinstance(a, str) else None
+    # a field the AI located but the template/deterministic missed = a proposed re-map
+    proposed_remap = [{"field": r["field"], "expected_label": _anchor_label(r["field"]), "found_label": r["ai_label"]}
+                      for r in recon if r["status"] == "ai-only" and r.get("ai_label")]
     detail = json.dumps({"missing_tabs": missing_tabs, "found": found, "expected": expected,
                          "disagreements": disagreements,
-                         "fields": [{k: r[k] for k in ("field", "status")} for r in recon if r["status"] not in ("agree",)][:20]})
+                         "fields": [{k: r.get(k) for k in ("field", "status", "det", "ai", "det_label", "ai_label")}
+                                    for r in recon if r["status"] != "agree"][:20],
+                         "proposed_remap": proposed_remap})
 
     if missing_tabs or not core_ok or disagreements > 0:
         status = "quarantined" if (missing_tabs or not core_ok) else "differs"
@@ -375,6 +412,70 @@ def process_file(path: str, actor: str = "system") -> dict:
     if stored:
         audit("archived", "source_document", doc_id, f"original stored in governed Volume: {stored}", actor)
     return {"status": "active", "doc_id": doc_id, "found": found, "expected": expected, "recon": recon, "stored_path": stored}
+
+
+# --------------------------------------------- quarantine resolution (WP2)
+def _latest_template(carrier, family):
+    rows = run(f"SELECT template_version, expected_tabs, field_map, field_count FROM {FQ}.`0_carrier_template` "
+               f"WHERE carrier={sq(carrier)} AND doc_family={sq(family)} ORDER BY template_version DESC", "tmpl latest").result.data_array or []
+    return rows[0] if rows else None
+
+
+def _bump(v):
+    m = re.match(r"v(\d+)", str(v or "v1"))
+    return f"v{(int(m.group(1)) if m else 1) + 1}"
+
+
+def accept_remap(doc_id, actor="workbench-user"):
+    """Accept the proposed re-map on a quarantined doc: write a NEW carrier-template version
+    that learns the found labels (append-only — the old version is retained), re-process the
+    archived file (now lands active under the learned template), and sign off the quarantine.
+    Emits template_updated, reprocessed, signed_off (+ ingested/archived from the reprocess)."""
+    d = run(f"SELECT carrier, doc_family, reconciliation_detail, stored_path, file_name FROM {FQ}.`1_source_document` "
+            f"WHERE doc_id={sq(doc_id)}", "load q").result.data_array or []
+    if not d:
+        return {"status": "error", "detail": "doc not found"}
+    carrier, family, detail_json, stored, orig_name = d[0]
+    remap = (json.loads(detail_json or "{}")).get("proposed_remap") or []
+    if not remap:
+        return {"status": "error", "detail": "no proposed remap on this document"}
+    if not stored:
+        return {"status": "error", "detail": "no archived file to re-process"}
+    tmpl = _latest_template(carrier, family)
+    old_ver, tabs_json, fmap_json, field_count = tmpl if tmpl else ("v1", "[]", "{}", 17)
+    fmap = json.loads(fmap_json) if isinstance(fmap_json, str) and fmap_json else {}
+    for r in remap:
+        f, found = r.get("field"), r.get("found_label")
+        if not f or not found:
+            continue
+        anchor = fmap.get(f, f"Rate Development/{r.get('expected_label') or f}")
+        if found.lower() not in anchor.lower():
+            fmap[f] = anchor + "|" + found
+    new_ver = _bump(old_ver)
+    tabs = json.loads(tabs_json) if isinstance(tabs_json, str) else list(tabs_json or [])
+    tabs_sql = "array(" + ",".join(sq(t) for t in tabs) + ")"
+    run(f"""INSERT INTO {FQ}.`0_carrier_template` VALUES
+        ({sq(carrier)},{sq(new_ver)},{sq(family)},{tabs_sql},{sq(json.dumps(fmap))},{sq(int(field_count or 17))},'active')""", "template v+")
+    audit("template_updated", "carrier_template", f"{carrier}/{new_ver}",
+          f"learned {len(remap)} label re-map(s) from {doc_id}: " + "; ".join(f"{r['field']} <- '{r.get('found_label')}'" for r in remap), actor)
+    # reprocess under the ORIGINAL file name so identify() re-derives carrier/group correctly
+    os.makedirs("/tmp/hbre", exist_ok=True)
+    local = f"/tmp/hbre/{orig_name}"
+    with open(local, "wb") as fh:
+        fh.write(_w.files.download(stored).contents.read())
+    res = process_file(local, actor=actor)
+    audit("reprocessed", "source_document", doc_id, f"re-processed under template {new_ver} -> {res.get('status')} {res.get('doc_id','')}", actor)
+    run(f"UPDATE {FQ}.`1_source_document` SET status='superseded', signed_off_by={sq(actor)}, signed_off_at=current_timestamp() WHERE doc_id={sq(doc_id)}", "signoff")
+    audit("signed_off", "source_document", doc_id, f"quarantine resolved via re-map (template {new_ver}); superseded by {res.get('doc_id','')}", actor)
+    return {"status": "resolved", "template_version": new_ver, "reprocessed": res}
+
+
+def reject_doc(doc_id, reason, actor="workbench-user"):
+    if not (reason or "").strip():
+        return {"status": "error", "detail": "a reason is required"}
+    run(f"UPDATE {FQ}.`1_source_document` SET status='rejected', signed_off_by={sq(actor)}, signed_off_at=current_timestamp() WHERE doc_id={sq(doc_id)}", "reject")
+    audit("rejected", "source_document", doc_id, f"rejected: {reason}", actor)
+    return {"status": "rejected", "doc_id": doc_id}
 
 
 if __name__ == "__main__":

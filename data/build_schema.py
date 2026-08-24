@@ -87,7 +87,8 @@ run(f"""CREATE OR REPLACE TABLE {FQ}.`5_scenario` (
   overrides STRING COMMENT 'JSON lever -> value that the analyst changed',
   baseline_action DOUBLE, scenario_action DOUBLE, value_at_stake_annual DOUBLE,
   reason STRING COMMENT 'required rationale', status STRING COMMENT 'draft | saved | approved',
-  parent_scenario_id STRING)
+  parent_scenario_id STRING,
+  funding_type STRING COMMENT 'FI (fully insured) | SF (self-funded) — the arrangement this decision was priced under')
 COMMENT '[hb-renewal] Retained negotiation decisions: every what-if saved with who/when/what-changed/why/what-it-was-worth. The unit of retained evidence.'""", "5_scenario")
 
 run(f"""CREATE OR REPLACE TABLE {FQ}.`5_gov_audit_event` (
@@ -198,6 +199,59 @@ AS $$
     "current_billed_premium_annual": current_premium_pmpm * current_members * 12,
   })
 $$""").replace("__FQ__", FQ), "fn_renewal_buildup")
+
+# Self-funded projection (WP1) as a governed function: takes the same renewal inputs plus
+# the stop-loss / admin assumptions, computes the fully-insured build-up internally, then
+# prices the group self-funded on the SAME experience base. No self-funded math in the app.
+run(("""CREATE OR REPLACE FUNCTION __FQ__.fn_selffunded_projection(
+  member_months DOUBLE, total_incurred_claims DOUBLE, months_experience DOUBLE,
+  current_members DOUBLE, current_total_premium_monthly DOUBLE,
+  demographic_adjustment DOUBLE, less_pooled_claims_pmpm DOUBLE, benefit_change DOUBLE,
+  annual_trend DOUBLE, months_of_trend DOUBLE, projected_excess_claims_pmpm DOUBLE,
+  large_claim_add_back_pmpm DOUBLE, target_loss_ratio DOUBLE, benefit_advisor_fee DOUBLE,
+  manual_rating_pool_increase DOUBLE, credibility_experience_weight DOUBLE,
+  credibility_manual_weight DOUBLE, adjustment DOUBLE,
+  isl_point DOUBLE, isl_premium_pmpm DOUBLE, asl_corridor DOUBLE, asl_premium_pmpm DOUBLE,
+  aso_fee_pmpm DOUBLE, network_access_pmpm DOUBLE, advisor_fee_pmpm DOUBLE,
+  expected_claims_credit DOUBLE)
+RETURNS STRING LANGUAGE PYTHON
+COMMENT '[hb-renewal] Fully-insured vs self-funded payoff on the same experience base: carrier renewal premium vs expected self-funded cost vs maximum liability (ISL + ASL + fixed). Same governed method as the FI build-up; the stop-loss/admin figures are labelled assumptions. No self-funded math runs in the app container.'
+AS $$
+  import json
+  incurred_pmpm = total_incurred_claims / member_months
+  adjusted = incurred_pmpm * demographic_adjustment
+  experience_claim_cost = adjusted - less_pooled_claims_pmpm
+  effective_trend = (1 + annual_trend) ** (months_of_trend / 12.0) - 1
+  projected_medical = (experience_claim_cost * benefit_change * (1 + effective_trend)
+                       + projected_excess_claims_pmpm + large_claim_add_back_pmpm)
+  experience_premium = projected_medical / target_loss_ratio * (1 + benefit_advisor_fee)
+  current_premium_pmpm = current_total_premium_monthly / current_members
+  experience_increase = experience_premium / current_premium_pmpm - 1
+  blended = (credibility_experience_weight * experience_increase
+             + credibility_manual_weight * manual_rating_pool_increase)
+  quoted = blended + adjustment
+  fi_pmpm = current_premium_pmpm * (1 + quoted)   # fully-insured billed premium PMPM after renewal
+  # self-funded: employer retains claims below the ISL point; the excess layer moves to ISL premium
+  expected_retained = max(projected_medical - projected_excess_claims_pmpm - expected_claims_credit, 0.0)
+  fixed_costs = aso_fee_pmpm + network_access_pmpm + advisor_fee_pmpm
+  total_sf = expected_retained + isl_premium_pmpm + asl_premium_pmpm + fixed_costs
+  saving = fi_pmpm - total_sf
+  asl_attachment = expected_retained * asl_corridor           # aggregate stop-loss caps retained claims
+  max_liability = asl_attachment + isl_premium_pmpm + asl_premium_pmpm + fixed_costs
+  mm = current_members * 12
+  return json.dumps({
+    "expected_retained_claims_pmpm": expected_retained, "isl_point": isl_point,
+    "isl_premium_pmpm": isl_premium_pmpm, "asl_premium_pmpm": asl_premium_pmpm,
+    "fixed_costs_pmpm": fixed_costs, "total_self_funded_pmpm": total_sf,
+    "fully_insured_pmpm": fi_pmpm, "saving_pmpm": saving,
+    "saving_pct": (saving / fi_pmpm if fi_pmpm else 0.0),
+    "annual_saving": saving * mm, "total_self_funded_annual": total_sf * mm,
+    "fully_insured_annual": fi_pmpm * mm, "asl_attachment_pmpm": asl_attachment,
+    "max_liability_pmpm": max_liability, "max_liability_annual": max_liability * mm,
+    "worst_case_vs_fi_pct": (max_liability / fi_pmpm - 1) if fi_pmpm else 0.0,
+    "current_members": current_members,
+  })
+$$""").replace("__FQ__", FQ), "fn_selffunded_projection")
 
 # --------------------------------------------------------- latest-only views
 for t in ("1_incurred_claims", "1_large_claims", "1_detailed_rates", "2_renewal_inputs"):

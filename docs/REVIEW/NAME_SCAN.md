@@ -2,9 +2,9 @@
 
 **Result: ZERO hits.** The scan runs against a **fresh clone of the public remote** (not the working directory), so it verifies what is actually published.
 
-- **Scan date:** 26 Aug 2026
+- **Scan date:** 26 Aug 2026; **re-scanned 24 Aug 2026** after the WP1/WP2/WP3 additions (self-funded path, quarantine resolution, version diff) — word-boundary re-scan over all tracked files: **zero real-party-name, personal-email, or bare-engagement-first-name hits** in contents, filenames, or the new code/docs.
 - **Public remote:** github.com/wryszka/hb-renewal-workbench
-- **Scanned commit SHA:** `5b2cf807180300f8d9e49b32c564243197b51e29` (single commit — history is one commit). The only change in the current HEAD relative to the scanned commit is this recorded SHA line — no code, data, or config changed, so the scan result holds for HEAD.
+- **History:** the public history was rewritten to a sanitised baseline (see the two fix rows below); the WP1/2/3 work adds normal commits on top. Every commit message is included in the scan.
 - **Term source:** the forbidden terms live in a local, gitignored file `.scanlist.local` (in `.gitignore`); they are **not** reproduced in this committed document, so the scan doc itself introduces no real names.
 
 ## Categories scanned (terms not listed here by design)
@@ -33,7 +33,7 @@ Each term is matched case-insensitively against: file **contents**, **filenames*
 | No token/secret strings | — |
 | **A personal email hardcoded as a Genie `parent_path`** (in the old create-only script) | **Fixed** — parent path now derived from the current user at runtime; the public history was **rewritten** to a single sanitised commit (force-push), not layered with a removal commit (per Phase 1.5). Verified absent from a subsequent fresh clone. |
 | Emails remaining in the tree | Only generic/synthetic: `analyst@broker.example` (seed actor). |
-| Substring false positives ("Ricks" inside "data**bricks**"; `MODEL_SPEC` in intentional doc references) | Not leaks — confirmed via word-boundary re-scan; the `renewal_engine.py` comment reference was updated to `docs/METHOD_SPEC.md`. |
+| Substring false positives (a surname fragment appearing inside the word "databricks"; the old spec filename in intentional doc references) | Not leaks — confirmed via word-boundary re-scan; the `renewal_engine.py` comment reference was updated to `docs/METHOD_SPEC.md`. |
 | **A bare engagement first name in `app/selffunded.py` comments** (present since the first public push) | **Fixed 2026-08-24.** Earlier scans matched the full name and missed the bare first name. The scan now includes **bare engagement first names** (word-boundary); the comments were rewritten to generic broker language and the public history rewritten to a sanitised commit. A persona-header shorthand using engagement first names/initials, introduced in `PERSONA_REVIEW_PACK.md`, was scrubbed to role-only in the same pass. |
 
 ## Accepted-public (explicit, logged in `DECISIONS.md` D13)

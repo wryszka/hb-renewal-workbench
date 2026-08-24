@@ -4,7 +4,7 @@ Triggered by the app's "Reset demo" button (jobs.run_now). Runs on serverless
 under the job's own identity (ambient auth). Regenerates the synthetic demo files
 to a writable dir, then reseeds via the same scripts as `deploy.sh`:
 make_carrier_file -> seed_book (build_schema, ingest hero, historical + governance)
--> generate_reviewer. Leaves 53 docs / 49 scenarios / 5 findings. All synthetic.
+-> generate_reviewer. Leaves 54 docs / 49 scenarios / 5 findings. All synthetic.
 
 Serverless notes: `spark_python_task` execs this file WITHOUT defining __file__,
 so we avoid it here (runpy sets __file__ for each script it runs). The Workspace

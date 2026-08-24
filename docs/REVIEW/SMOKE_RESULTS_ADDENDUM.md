@@ -94,3 +94,20 @@ Summit Health       2000+    2   6.5%  29.3%   26.2%   3.1pt  $1,518,234
 | 13 | Local regression (Phase 3.3) | **PASS** — 2/2 to 4dp |
 
 **Definition of done met:** 13/13 green on record; `docs/REVIEW/` complete (7 files); public clone scans clean; run-sheet carries the measured live-drop timings.
+
+## Phase 6 — Ingestion depth + self-funded (WP1/WP2/WP3) — verified against DEV 24 Aug 2026
+
+All exercised against the DEV warehouse; demo state restored by a full reseed afterward (final counts **54 docs / 49 scenarios / 15 audit events**; `DOC-Q900` quarantined; Harborview 2026H2 chain = v0 superseded → hero active).
+
+| # | Work package | Step | Result |
+|---|--------------|------|--------|
+| 14 | WP2 quarantine→resolution | `DOC-Q900` is a resolvable moved-label quarantine | **PASS** — status `quarantined`, 15/17, `proposed_remap` for `member_months` (Covered Life-Months) + `annual_trend` (Trend Rate (annual)), archived file present |
+| 15 | WP2 | `accept_remap("DOC-Q900")` end-to-end | **PASS** — Cascade template **v2** written (old retained); DOC-Q900 → `superseded`+signed-off; new active `Cascade Care / Fernbrook / 2026H2` doc (17/17); audit `template_updated` → `ingested`/`archived` → `reprocessed` → `signed_off` |
+| 16 | WP2 | `extract_ai` returns matched label | **PASS** — prompt + parse restored so a **live** broken drop yields a `proposed_remap` (not only the seed twin) |
+| 17 | WP3 version diff | `GET /api/versions/{doc}` | **PASS** — chain=2, `latest_active` correct, diff field `annual_trend`, impact 28.22% → 26.95%, annual billed-premium swing −$58,685 (via `fn_renewal_buildup` on each version) |
+| 18 | WP3 recompute-on-latest | `POST /api/scenario/recompute-latest` | **PASS** — appends a fresh governed scenario on the active doc (action **22.97%**, $183.5k at stake), audit `scenario_recomputed`; already-on-latest correctly rejected (409) |
+| 19 | WP1 self-funded | `fn_selffunded_projection` deployed + priced | **PASS** — payoff on hero inputs: FI **$5.85M/yr** vs SF **$5.37M/yr** → saving **$482k (8.2%)**, max liability **$6.51M/yr**; identities hold |
+| 20 | WP1 | `5_scenario.funding_type` column + flag | **PASS** — column present, all 49 seeded scenarios `FI`; `ENABLE_SELFFUNDED` **off** → `/api/selffunded` 404 and no new UI (zero visible change) |
+| 21 | WP1 | Offline pytest `tests/test_selffunded.py` | **PASS** — 3/3 (payoff identities · inline UC-formula parity with `compute_self_funded` · credit reduces retained claims) |
+
+Pipeline mirror re-verified byte-identical (`diff -q jobs/ingest_pipeline.py app/ingest_pipeline.py`). Frontend JS re-parsed clean after all additions.

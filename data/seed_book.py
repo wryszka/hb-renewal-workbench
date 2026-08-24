@@ -101,6 +101,14 @@ import runpy  # noqa: E402
 runpy.run_path(str(HERE / "build_schema.py"), run_name="__main__")  # in-process (serverless-safe; no subprocess)
 print("ingesting hero through the ingestion module…")
 import ingest_pipeline  # noqa: E402
+import make_carrier_file as _mcf  # noqa: E402
+# Seed a real version chain: the carrier's FIRST (richer) submission, ingested first so the
+# hero file supersedes it — leaving v0 (superseded) -> hero (active) for the version-diff beat,
+# demoable without a live drop. The live …_v2 drop then extends the chain.
+_v0 = "/tmp/meridian_harborview_2026H2_v0.xlsx"
+_mcf.build(_v0, dict(_mcf.BASE, annual_trend=0.1385))
+r0 = ingest_pipeline.process_file(_v0, actor="seed@local")
+print(f"  v0 predecessor -> {r0['status']} {r0.get('doc_id')}")
 res = ingest_pipeline.process_file(str(DEMODIR / "meridian_harborview_2026H2.xlsx"), actor="seed@local")
 print(f"  hero -> {res['status']} {res.get('doc_id')} ({res.get('found')}/{res.get('expected')})")
 
@@ -138,7 +146,7 @@ run(f"INSERT INTO {FQ}.`1_source_document` VALUES {doc_vals}", "hist docs")
 
 scn_vals = ",".join(
     f"({sv(sid)},{sv(did)},{sv(car)},{sv(grp)},'Negotiated renewal','analyst@broker.example',"
-    f"current_timestamp() - INTERVAL {n+1} DAYS,'carrier_proposal',{sv(ovj)},{ba},{sa},{vas},{sv(rsn)},'approved',NULL)"
+    f"current_timestamp() - INTERVAL {n+1} DAYS,'carrier_proposal',{sv(ovj)},{ba},{sa},{vas},{sv(rsn)},'approved',NULL,'FI')"
     for n, (sid, did, car, grp, ba, sa, vas, ovj, rsn) in enumerate(scns))
 run(f"INSERT INTO {FQ}.`5_scenario` VALUES {scn_vals}", "hist scenarios")
 
@@ -149,21 +157,27 @@ run(f"INSERT INTO {FQ}.`5_gov_audit_event` VALUES {ev_vals}", "hist events")
 
 # governance states visible in the book from the first screen: a quarantined file,
 # a differs (pending human confirm), and a superseded prior version.
-qdiff = json.dumps({"missing_tabs": ["Rate Development"], "found": 6, "expected": 17,
-                    "fields": [{"field": "annual_trend", "status": "missing"},
-                               {"field": "member_months", "status": "missing"},
-                               {"field": "target_loss_ratio", "status": "det-only"}]})
+# DOC-Q900 is a RESOLVABLE (moved/renamed-label) quarantine — archived file + a proposed
+# re-map — so the accept-remap → re-process → active loop works without a live drop.
+_qpath = "/tmp/cascade_fernbrook_2026h2.xlsx"
+_mcf.build(_qpath, dict(_mcf.BASE), broken=True)
+q900_stored = ingest_pipeline.archive(open(_qpath, "rb").read(), "DOC-Q900", "cascade_fernbrook_2026h2.xlsx", quarantined=True)
+qdiff = json.dumps({"missing_tabs": [], "found": 15, "expected": 17, "disagreements": 0,
+                    "fields": [{"field": "member_months", "status": "ai-only", "det": None, "ai": 5412, "det_label": None, "ai_label": "Covered Life-Months"},
+                               {"field": "annual_trend", "status": "ai-only", "det": None, "ai": 0.122, "det_label": None, "ai_label": "Trend Rate (annual)"}],
+                    "proposed_remap": [{"field": "member_months", "expected_label": "Member Months", "found_label": "Covered Life-Months"},
+                                       {"field": "annual_trend", "expected_label": "Annual Trend", "found_label": "Trend Rate (annual)"}]})
 ddiff = json.dumps({"found": 16, "expected": 17, "disagreements": 1,
                     "fields": [{"field": "less_pooled_claims_pmpm", "status": "differs"}]})
 run(f"""INSERT INTO {FQ}.`1_source_document` VALUES
-  ('DOC-Q900','Cascade Care','Fernbrook Retail','2026H2','cascade_fernbrook_2026h2.pdf','renewal_exhibit',
-   current_timestamp() - INTERVAL 1 DAYS,17,6,{sv(qdiff)},'quarantined',NULL,NULL,NULL),
+  ('DOC-Q900','Cascade Care','Fernbrook Retail','2026H2','cascade_fernbrook_2026h2.xlsx','renewal_exhibit',
+   current_timestamp() - INTERVAL 1 DAYS,17,15,{sv(qdiff)},'quarantined',NULL,NULL,{sv(q900_stored)}),
   ('DOC-D901','Summit Health','Oakmont Freight','2026H1','summit_oakmont_2026h1.xlsx','renewal_exhibit',
    current_timestamp() - INTERVAL 2 DAYS,17,16,{sv(ddiff)},'differs',NULL,NULL,NULL),
   ('DOC-S902','Meridian Assurance','Harborview Logistics','2025H2','meridian_harborview_2025h2.xlsx','renewal_exhibit',
    current_timestamp() - INTERVAL 190 DAYS,17,17,'{{\"found\":17,\"expected\":17}}','superseded','analyst@broker.example',current_timestamp() - INTERVAL 190 DAYS,NULL)""", "governance states")
 run(f"""INSERT INTO {FQ}.`5_gov_audit_event` VALUES
-  ('AE-Q900','quarantined','source_document','DOC-Q900','only 6/17 fields; Rate Development tab missing — held for review','system',current_timestamp() - INTERVAL 1 DAYS),
+  ('AE-Q900','quarantined','source_document','DOC-Q900','15/17 fields; two core labels renamed (Covered Life-Months, Trend Rate (annual)) — held for a re-map','system',current_timestamp() - INTERVAL 1 DAYS),
   ('AE-D901','extraction_differs','source_document','DOC-D901','two paths disagree on pooled-claims credit — pending human confirm','system',current_timestamp() - INTERVAL 2 DAYS),
   ('AE-S902','superseded','source_document','DOC-S902','replaced by the 2026H2 renewal','system',current_timestamp() - INTERVAL 190 DAYS)""", "governance events")
 

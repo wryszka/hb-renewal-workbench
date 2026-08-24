@@ -12,7 +12,7 @@ Left sidebar: Overview (Daily view · Dashboard) · Pipeline (Ingestion · Book)
 
 ### Daily view (`/api/overview`)
 - **Purpose:** the renewal desk today.
-- **KPI tiles [VIEW/STORED]:** In the book **53** · Active **50** · Needs attention **2** (quarantined 1 + differs 1) · Avg carrier action **25.4%** (avg of `5_scenario.baseline_action`) · Value negotiated **$12,975,304** (sum of `5_scenario.value_at_stake_annual`, status saved/approved).
+- **KPI tiles [VIEW/STORED]:** In the book **54** · Active **50** · Needs attention **2** (quarantined 1 + differs 1) · Avg carrier action **25.4%** (avg of `5_scenario.baseline_action`) · Value negotiated **$12,975,304** (sum of `5_scenario.value_at_stake_annual`, status saved/approved).
 - **Interactive:** **↺ Reset demo** (top-right) → confirm dialog → `POST /api/reset` triggers the serverless `hb_reseed` Job → polls `GET /api/reset/status` every 5 s (spinner "reseeding… Ns") → on success refreshes Daily view. **Open workspace →** (on the hero card) → `openDoc(hero_doc_id)` → loading spinner → Renewal Workspace. **"Needs your attention" rows** → click → quarantined row opens the quarantine view, active row opens the workspace. **Recent activity** rows: display only.
 - **States:** loading = none (renders after `/api/overview`); empty attention = "Nothing in quarantine — the book is clean."; reset failure = "reset <state> (Ns)", button re-enabled.
 - **Dead ends:** recent-activity rows are not clickable (display only) — not a stuck state (sidebar always available).
@@ -34,8 +34,8 @@ Left sidebar: Overview (Daily view · Dashboard) · Pipeline (Ingestion · Book)
 
 ### Book (`/api/book`)
 - **Purpose:** every renewal, all statuses.
-- **Content [STORED/UC]:** 53 rows; carrier action per row is `max(5_scenario.baseline_action)` **[STORED]**, or for a fresh active exhibit with no scenario, computed live via `fn_renewal_buildup` **[UC]**.
-- **Interactive:** search box + status-filter chips (active/differs/quarantined/superseded, with counts); row click → active → `openDoc` (workspace); quarantined/differs → quarantine view (with **← Back**).
+- **Content [STORED/UC]:** 54 rows; carrier action per row is `max(5_scenario.baseline_action)` **[STORED]**, or for a fresh active exhibit with no scenario, computed live via `fn_renewal_buildup` **[UC]**.
+- **Interactive:** search box + status-filter chips (active/differs/quarantined/superseded, with counts); row click → active/differs/**superseded** → `openDoc` (workspace, incl. the WP3 version panel); quarantined → quarantine **resolution** view (with **← Back**).
 - **States:** filter chips reflect counts; no empty state in seeded data.
 
 ### Renewal Workspace (`/api/document/{id}`)
@@ -44,9 +44,11 @@ Left sidebar: Overview (Daily view · Dashboard) · Pipeline (Ingestion · Book)
 - **Levers (right) [JS on drag]:** Annual trend, Months of trend, Demographic adj, Pooled claims credit, Benefit change, Target loss ratio, **Credibility (experience)**, Broker adjustment. Each `oninput` → `recompute()` → JS `computeBuildup`. Manual pool increase is shown in the build-up with 🔒 and is **not** a lever.
 - **Result strip:** Carrier quoted **[UC]** = 26.9491%; **Your position [JS]**; **Value at stake / yr [JS]** (= baseline−scenario projected annual premium). Strip label reads "governed by fn_renewal_buildup" — accurate for the baseline and the saved record, **not** for the live JS preview.
 - **Actions:** **💾 Save scenario** → modal (name + reason required, else HTTP 400) → `POST /api/scenario` recomputes via `fn_renewal_buildup` **[UC]**, inserts a `5_scenario` row (`status='saved'`) + a `scenario_saved` audit event. **✎ Draft exec summary** → `POST /api/summary` (FMAPI). **🔗 Lineage** → `/api/lineage` chain + **Download original**.
-- **Compare panel [UC/STORED]:** Carrier proposal (baseline quoted **[UC]**) vs each saved scenario (`scenario_action`, `value_at_stake_annual` **[STORED]**).
-- **Reforecast banner:** appears when `reforecast_months>12` (after a month13 drop). It is a **cue only** — no side-by-side recompute (V2).
-- **Dead ends / no-approve:** a saved scenario cannot be **edited, deleted, or approved** in-app (`save_scenario` is insert-only, `main.py:147`; the only `approved` rows are seeded). §4 actuary.
+- **Compare panel [UC/STORED]:** Carrier proposal (baseline quoted **[UC]**) vs each saved scenario (`scenario_action`, `value_at_stake_annual` **[STORED]**). When the open doc is **superseded**, each scenario shows a **"data moved"** chip and a **↻ Recompute decisions on the latest version** button → `POST /api/scenario/recompute-latest` (appends fresh governed scenarios on the active version; originals retained; `scenario_recomputed` audit).
+- **Version history panel (WP3) [UC]:** shown when the group+period has ≥2 versions (`GET /api/versions/{id}`). Lists the chain (superseded → active) with each version's governed action, a **field-level diff** of the two most recent inputs, and a **money-impact banner** (old→new action + annual billed-premium swing). Seeded Harborview 2026H2 has v0 (superseded, trend 0.1385) → hero (active, 0.122); a live `…_v2` drop extends it.
+- **Reforecast banner:** appears when `reforecast_months>12` (after a month13 drop) — a cue that the data moved; recompute-on-latest (above) is the paired action.
+- **Self-funded payoff card (WP1) [UC, flag-gated]:** rendered only when `ENABLE_SELFFUNDED` is on (off in the demo → not present). `POST /api/selffunded` → `fn_selffunded_projection` returns carrier FI premium vs expected self-funded cost vs expected saving vs maximum liability (+ PMPM breakdown, worst-case-vs-FI). Save modal then offers a **funding-arrangement** selector (FI/SF → `5_scenario.funding_type`).
+- **Dead ends / no-approve:** a saved scenario cannot be **edited, deleted, or approved** in-app (`save_scenario` is insert-only; the only `approved` rows are seeded). §4 actuary.
 
 ### Benchmarks (`/api/benchmarks`)
 - **Purpose:** book trend derived from retained decisions.
@@ -64,7 +66,7 @@ Left sidebar: Overview (Daily view · Dashboard) · Pipeline (Ingestion · Book)
 - **VERIFY-MANUALLY:** the Native Genie iframe (auth-gated). Steps: authenticated session → Ask the Book → Native Genie → confirm the embed renders.
 
 ### Audit (`/api/audit`)
-- **Table [STORED]:** last 40 `5_gov_audit_event` rows. Clean-state total 12 (ingested 1, archived 1, extraction_differs 1, quarantined 1, superseded 1, scenario_approved 7).
+- **Table [STORED]:** last 40 `5_gov_audit_event` rows. Clean-state total 15 (ingested 2, archived 2, extraction_differs 1, quarantined 1, superseded 2, scenario_approved 7 — the extra ingested/archived/superseded are the WP3 v0 predecessor).
 - **Interactive:** entity ids starting `SCN`/`DOC` → `openProvenance` → `/api/deal` or `/api/document` → provenance chain (deal → source_document → file) + **⬇ Download original submission**. Historical seeded deals show "not archived" (no `stored_path`); the hero + live uploads download.
 
 ### Learn (`/api/learn`)
@@ -75,12 +77,13 @@ Left sidebar: Overview (Daily view · Dashboard) · Pipeline (Ingestion · Book)
 ## 2. Click-flow walkthroughs (freshly reset state, per reordered runsheet beat)
 
 **0 Problem** — verbal, no screen.
-**1 Daily view** — Overview→Daily view. Screen: hero card "Harborview Logistics — Meridian Assurance · 2026H2", tiles 53/50/2/25.4%/$12,975,304, attention list (Cascade Fernbrook quarantined, Summit Oakmont differs), recent activity.
+**1 Daily view** — Overview→Daily view. Screen: hero card "Harborview Logistics — Meridian Assurance · 2026H2", tiles 54/50/2/25.4%/$12,975,304, attention list (Cascade Fernbrook quarantined, Summit Oakmont differs), recent activity.
 **2 Ingest** — Ingestion→Upload→drop `meridian_harborview_2026H2.xlsx`. **During ~10 s:** button shows "Extracting (two paths)… ⟳". After: result card "active · 17/17"; open drill-down → 17-row reconciliation, all AGREE. **On failure:** result shows `{error}`; fallback = the hero is already active (book non-empty). File-arrival Job path instead: ~57 s (drop into `landing/inbox`), nothing on screen until the row appears in Recent ingestions.
-**3 Quarantine** — drop `meridian_brokenlayout.xlsx`. **During ~11 s:** spinner. After: "quarantined 15/17", field diff (annual_trend, member_months missing). Fallback: seeded `DOC-Q900`.
+**3 Quarantine → resolution (WP2)** — drop `meridian_brokenlayout.xlsx` (~11 s) → "quarantined 15/17"; open it (or seeded `DOC-Q900`) → resolution view: expected-vs-found table + **proposed re-map** + **Accept mapping & re-process** / **Reject with reason** / **Template history**. Accept → banner "Resolved. Template v2 … re-processed as active" + "Open the now-active renewal →". Fallback: seeded resolvable `DOC-Q900` (Cascade/Fernbrook).
 **4 Matches** — Book→Harborview row→Workspace (spinner while `/api/document` runs the function). Build-up left column = the exhibit line-by-line; blended action **26.9491%**.
+**4b Version diff (WP3)** — same Workspace: the **Version history** panel shows v0 (superseded, 0.1385) → active (0.122), the `annual_trend` diff and impact banner (**28.22% → 26.95%**, −$58,685/yr). Dropping `…_v2.xlsx` extends the chain live; a decision on a superseded version gets the **data-moved** chip + one-click recompute.
 **5 Negotiate** — Levers→Annual Trend→7.0% (Scenario column + strip update instantly **[JS]**): Your position **22.97%**, Value at stake **$183,525**. Save (name "Trend to book", reason "Carrier trend 5.2pts above our book median") → alert "Saved SCN-… — $183,525/yr". Then ✎ Draft exec summary → summary text. **On save failure:** modal alert; nothing persisted.
-**6 Reforecast** — drop `..._month13.xlsx` (~10 s) → Workspace banner "Fresh data available — 13 claims months loaded". **On failure:** skip, mention verbally.
+**6 Reforecast** — drop `..._month13.xlsx` (~10 s) → Workspace banner "Fresh data available — 13 claims months loaded"; pair with the WP3 recompute-on-latest. **On failure:** skip, mention verbally.
 **7 Benchmarks** — Renewal→Benchmarks. 19 rows; Cascade highlighted padder (amber), Evergreen fair (green). Click a row → inline retained-deals lineage.
 **8 Agents** — Intelligence→Agents. Reviewer 5 findings; Draft-a-summary inline; Genie inline ask.
 **9 Ask the book** — toggle Workbench panel; chip "Which carrier runs richest…" → answer names Cascade + SQL + 1 row.
@@ -94,7 +97,7 @@ Left sidebar: Overview (Daily view · Dashboard) · Pipeline (Ingestion · Book)
 
 ## 3. State machine — what the demo mutates
 
-**Starting state (post-Reset, deterministic):** `1_source_document` 53 (active 50, differs 1 `DOC-D901`, quarantined 1 `DOC-Q900`, superseded 1 `DOC-S902`); `5_scenario` 49 (all `approved`); `4_reviewer_finding` 5; `5_gov_audit_event` 12; `1_incurred_claims` 12; `1_large_claims` 12; `1_detailed_rates` 24 (12 current/12 renewal); `2_renewal_inputs` 1; `0_carrier_template` 2. Volume `demo_files/` has the 4 synthetic files; `processed/` has the hero archive.
+**Starting state (post-Reset, deterministic):** `1_source_document` **54** (active 50, differs 1 `DOC-D901`, quarantined 1 `DOC-Q900`, superseded 2 — `DOC-S902` + the Harborview **v0 predecessor** ingested before the hero so the WP3 version chain exists); `5_scenario` 49 (all `approved`, `funding_type='FI'`); `4_reviewer_finding` 5; `5_gov_audit_event` **15** (the extra 3 = the v0 ingest's `ingested`/`archived` + the hero superseding v0); `1_incurred_claims` 24 (hero 12 + v0 12); `1_large_claims` 24; `1_detailed_rates` 48; `2_renewal_inputs` 2 (hero + v0); `0_carrier_template` 2. Volume `demo_files/` has the 4 synthetic files; `processed/` has the hero + v0 archives; `quarantine/` has the `DOC-Q900` archive. `fn_selffunded_projection` deployed; `ENABLE_SELFFUNDED` off.
 
 | Live action | Mutates | Reversible in-app? | Repeat (idempotency) |
 |-------------|---------|--------------------|----------------------|
@@ -106,6 +109,9 @@ Left sidebar: Overview (Daily view · Dashboard) · Pipeline (Ingestion · Book)
 | Scenario save | +1 `5_scenario` (`saved`) + `scenario_saved` audit + Delta version on `5_scenario` | No (no delete in-app) | Each save adds another row; benchmark for that carrier×band shifts |
 | Summary run | none | — | Re-runs FMAPI; text varies |
 | Genie ask | none (read) | — | Stateful within the conversation |
+| **Accept re-map (WP2)** | new `0_carrier_template` version (old retained) + quarantined doc → `superseded`+signed-off + a **new active** doc (17/17) + source rows + Volume archive; `template_updated`/`ingested`/`archived`/`reprocessed`/`signed_off` audit | No (Reset only) | Idempotent per learned label; a second same-layout drop then ingests active with **no** quarantine |
+| **Reject with reason (WP2)** | quarantined doc → `status='rejected'` + `rejected` audit | No | — |
+| **Recompute on latest (WP3)** | +1 `5_scenario` (`saved`) per stale decision on the active version + `scenario_recomputed` audit | No | Each run appends again (guarded: a scenario already on the latest version is rejected 409) |
 
 **Ordering constraints:**
 - **Drop v2 before beat 4/5 and you poison the trust beat:** the active hero becomes the v2 exhibit (trend 0.105), so "matches your sheet 26.9491%" no longer holds. Keep v2 out of the main flow (it is not a numbered beat).
@@ -156,7 +162,9 @@ Opens the hero build-up and reproduces each line against the method (seeded valu
 | $183,525 ("~$183k") | base − scenario `projected_billed_premium_annual` at 7% **[UC]** | Yes |
 | $12,975,304 (value negotiated) | sum `5_scenario.value_at_stake_annual` (saved/approved) | Yes (unless you save a live scenario → grows) |
 | 17/17 fields | `1_source_document.fields_found/expected` on hero | Yes |
-| 53 / 50 active / 49 scenarios / 5 findings / 12 audit / 24 detailed | seed counts | Yes |
+| 54 docs / 50 active / 49 scenarios / 5 findings / 15 audit / 48 detailed | seed counts (incl. WP3 v0 predecessor) | Yes |
+| Version diff: 28.22% → 26.95%, −$58,685/yr | `fn_renewal_buildup` on v0 (0.1385) vs hero (0.122) **[UC]** | Yes |
+| Self-funded (flag on): FI $5.85M vs SF $5.37M → save $482k (8.2%), max liability $6.51M | `fn_selffunded_projection` on hero + default SL/admin assumptions **[UC]** | Yes (assumptions fixed) |
 | Cascade 8.09% (100-499), 8.2% (2000+) padder; Evergreen 5.4% fair | `6_book_trend_benchmark` **[VIEW]** | Yes (seed rng fixed) |
 | Cascade 2000+ value $3,851,104 | `6_book_trend_benchmark.total_value_negotiated` | Yes |
 | Claims Oct-2025 $339,141 → Sep-2026 $347,515 (12 mo) | `mv_claims_experience` | Yes |
@@ -179,9 +187,8 @@ Opens the hero build-up and reproduces each line against the method (seeded valu
 6. **Repeating a live drop** keeps adding docs/months (broken → attention grows; month13 → 14 months). *"Each drop is a real event; Reset returns to a clean book."*
 7. **$183k vs $12.97M** confusion. *"$183k is this one deal; $12.97M is the book we've already negotiated."*
 8. **Genie phrasing:** "richest carrier" may come back as a clarifying question. *"It's asking to refine — the rows already show Cascade on top."*
-9. **Reforecast banner** has no side-by-side recompute. *"It flags the data moved; side-by-side recompute is next."*
-10. **No edit/delete/approve of a saved scenario.** *"Decisions are append-only and audited; an approval step is roadmap."*
-11. **Self-funded** has no control. *"Engine's there, wiring is V2 — same levers, different funding math."*
+9. **No edit/delete/approve of a saved scenario.** *"Decisions are append-only and audited; an approval step is roadmap."*
+10. **Self-funded is behind a flag** (`ENABLE_SELFFUNDED`, off in the demo) — the stop-loss/admin PMPMs are assumptions until set with the client. *"The self-funded payoff is built and governed; it's off until we set the stop-loss numbers with you."*
 
 **(c) Cosmetic**
 12. **Lineage chain nodes look clickable but aren't** (only Download/Open act). *"The chain's the map; the file's the click."*

@@ -31,6 +31,14 @@ INPUT_COLS = ["member_months", "total_incurred_claims", "months_experience", "cu
               "manual_rating_pool_increase", "credibility_experience_weight",
               "credibility_manual_weight", "adjustment"]
 
+# WP1 — self-funded scenario path. Flag-gated; OFF by default (zero visible change).
+ENABLE_SELFFUNDED = os.getenv("ENABLE_SELFFUNDED", "").lower() in ("1", "true", "yes", "on")
+SF_COLS = ["isl_point", "isl_premium_pmpm", "asl_corridor", "asl_premium_pmpm",
+           "aso_fee_pmpm", "network_access_pmpm", "advisor_fee_pmpm", "expected_claims_credit"]
+SF_DEFAULTS = {"isl_point": 115000.0, "isl_premium_pmpm": 82.5, "asl_corridor": 1.25,
+               "asl_premium_pmpm": 9.0, "aso_fee_pmpm": 48.0, "network_access_pmpm": 6.5,
+               "advisor_fee_pmpm": 0.0, "expected_claims_credit": 0.0}
+
 
 def sq(v):
     if v is None:
@@ -61,6 +69,17 @@ def buildup(inputs: dict, overrides: dict | None = None) -> dict:
         args.update({k: v for k, v in overrides.items() if k in INPUT_COLS})
     call = ",".join(sq(args.get(c)) for c in INPUT_COLS)
     rows = query(f"SELECT {FQ}.fn_renewal_buildup({call}) AS j")
+    return json.loads(rows[0]["j"])
+
+
+def selffunded_projection(inputs: dict, overrides: dict | None, sf: dict | None) -> dict:
+    args = dict(inputs)
+    if overrides:
+        args.update({k: v for k, v in overrides.items() if k in INPUT_COLS})
+    sfp = dict(SF_DEFAULTS)
+    sfp.update({k: v for k, v in (sf or {}).items() if k in SF_COLS})
+    call = ",".join(sq(args.get(c)) for c in INPUT_COLS) + "," + ",".join(sq(sfp[c]) for c in SF_COLS)
+    rows = query(f"SELECT {FQ}.fn_selffunded_projection({call}) AS j")
     return json.loads(rows[0]["j"])
 
 
@@ -131,6 +150,45 @@ def document(doc_id: str):
     return result
 
 
+@app.get("/api/versions/{doc_id}")
+def versions(doc_id: str):
+    """The version chain for this renewal — a carrier resubmission supersedes the prior file.
+    Each version carries its governed-function action; the two most recent get a field-level
+    diff and the money impact of the change (all traced to the same governed function)."""
+    base = query(f"SELECT employer_group, policy_period FROM {FQ}.`1_source_document` WHERE doc_id={sq(doc_id)}")
+    if not base:
+        raise HTTPException(404, "document not found")
+    grp, per = base[0]["employer_group"], base[0]["policy_period"]
+    chain = query(f"SELECT doc_id, file_name, status, cast(ingested_at AS STRING) ingested_at, "
+                  f"fields_found, fields_expected FROM {FQ}.`1_source_document` "
+                  f"WHERE employer_group={sq(grp)} AND policy_period={sq(per)} AND doc_family='renewal_exhibit' "
+                  f"ORDER BY ingested_at")
+    builds = {}
+    for v in chain:
+        inp = _hero_inputs(v["doc_id"])
+        b = buildup(inp) if inp else None
+        builds[v["doc_id"]] = b
+        v["blended_rate_action"] = b["quoted_change"] if b else None
+    result = {"group": grp, "period": per, "chain": chain,
+              "latest_active": next((v["doc_id"] for v in chain if v["status"] == "active"), None)}
+    if len(chain) >= 2:
+        prev, latest = chain[-2], chain[-1]
+        pi, li = _hero_inputs(prev["doc_id"]), _hero_inputs(latest["doc_id"])
+        diff = []
+        if pi and li:
+            for k in INPUT_COLS:
+                a, b = pi.get(k), li.get(k)
+                if a is not None and b is not None and abs((a or 0) - (b or 0)) > 1e-9:
+                    diff.append({"field": k, "old": a, "new": b})
+        bp, bl = builds.get(prev["doc_id"]), builds.get(latest["doc_id"])
+        result["diff"] = diff
+        if bp and bl:
+            result["impact"] = {"old_doc": prev["doc_id"], "new_doc": latest["doc_id"],
+                                "old_action": bp["quoted_change"], "new_action": bl["quoted_change"],
+                                "premium_delta_annual": bl["projected_billed_premium_annual"] - bp["projected_billed_premium_annual"]}
+    return result
+
+
 @app.post("/api/recompute")
 def recompute(payload: dict = Body(...)):
     doc_id = payload["doc_id"]
@@ -163,12 +221,67 @@ def save_scenario(payload: dict = Body(...)):
     members = inputs.get("current_members") or 0
     band = "<100" if members < 100 else "100-499" if members < 500 else "500-1999" if members < 2000 else "2000+"
     stored = {**overrides, "members": members, "group_band": band}
+    funding = (payload.get("funding_type") or "FI").upper()
     query(f"""INSERT INTO {FQ}.`5_scenario` VALUES ({sq(sid)},{sq(doc_id)},{sq(doc['carrier'])},
         {sq(doc['employer_group'])},{sq(name)},{sq(actor)},current_timestamp(),'carrier_proposal',
         {sq(json.dumps(stored))},{sq(base['blended_rate_action'])},{sq(scn['quoted_change'])},
-        {sq(vas)},{sq(reason)},'saved',NULL)""")
+        {sq(vas)},{sq(reason)},'saved',NULL,{sq(funding)})""")
     audit("scenario_saved", "scenario", sid, f"{name}: {json.dumps(overrides)}; ${vas:,.0f} at stake", actor)
     return {"scenario_id": sid, "value_at_stake_annual": vas, "scenario_action": scn["quoted_change"]}
+
+
+@app.post("/api/scenario/recompute-latest")
+def scenario_recompute_latest(payload: dict = Body(...)):
+    """A decision built on a superseded file: re-run its overrides on the latest active
+    version's inputs and append it as a fresh governed scenario (the original is retained)."""
+    sid = payload["scenario_id"]
+    s = query(f"SELECT source_document_id, scenario_name, overrides, reason, carrier, employer_group "
+              f"FROM {FQ}.`5_scenario` WHERE scenario_id={sq(sid)}")
+    if not s:
+        raise HTTPException(404, "scenario not found")
+    s = s[0]
+    base = query(f"SELECT employer_group, policy_period FROM {FQ}.`1_source_document` WHERE doc_id={sq(s['source_document_id'])}")
+    if not base:
+        raise HTTPException(404, "source document not found")
+    grp, per = base[0]["employer_group"], base[0]["policy_period"]
+    latest = query(f"SELECT doc_id FROM {FQ}.`1_source_document` WHERE employer_group={sq(grp)} AND policy_period={sq(per)} "
+                   f"AND status='active' AND doc_family='renewal_exhibit' ORDER BY ingested_at DESC LIMIT 1")
+    if not latest:
+        raise HTTPException(409, "no active version to recompute on")
+    new_doc = latest[0]["doc_id"]
+    if new_doc == s["source_document_id"]:
+        raise HTTPException(409, "scenario is already on the latest version")
+    inp = _hero_inputs(new_doc)
+    if not inp:
+        raise HTTPException(404, "no inputs for latest version")
+    overrides = json.loads(s["overrides"]) if s.get("overrides") else {}
+    ov = {k: v for k, v in overrides.items() if k in INPUT_COLS}
+    b = buildup(inp)
+    scn = buildup(inp, ov)
+    vas = b["projected_billed_premium_annual"] - scn["projected_billed_premium_annual"]
+    nsid = f"SCN-{uuid.uuid4().hex[:8]}"
+    actor = payload.get("actor") or "workbench-user"
+    name = f"{s['scenario_name']} (recomputed on latest)"
+    query(f"""INSERT INTO {FQ}.`5_scenario` VALUES ({sq(nsid)},{sq(new_doc)},{sq(s['carrier'])},
+        {sq(s['employer_group'])},{sq(name)},{sq(actor)},current_timestamp(),'carrier_proposal',
+        {sq(s['overrides'])},{sq(b['blended_rate_action'])},{sq(scn['quoted_change'])},
+        {sq(vas)},{sq(s['reason'] or 'recomputed on latest version')},'saved',NULL,'FI')""")
+    audit("scenario_recomputed", "scenario", nsid, f"re-ran {sid} on latest version {new_doc}; ${vas:,.0f} at stake", actor)
+    return {"scenario_id": nsid, "new_doc": new_doc, "value_at_stake_annual": vas, "scenario_action": scn["quoted_change"]}
+
+
+@app.post("/api/selffunded")
+def selffunded_endpoint(payload: dict = Body(...)):
+    """Price the same renewal self-funded via the governed UC function fn_selffunded_projection.
+    Flag-gated (ENABLE_SELFFUNDED); off by default so there is zero visible change."""
+    if not ENABLE_SELFFUNDED:
+        raise HTTPException(404, "self-funded path not enabled")
+    doc_id = payload["doc_id"]
+    inputs = _hero_inputs(doc_id)
+    if not inputs:
+        raise HTTPException(404, "no inputs")
+    return {"payoff": selffunded_projection(inputs, payload.get("overrides") or {}, payload.get("sf") or {}),
+            "defaults": SF_DEFAULTS}
 
 
 @app.get("/api/benchmarks")
@@ -374,7 +487,7 @@ def config():
     host, links, did, gid = _workspace_links()
     return {"dashboard_url": f"{host}/embed/dashboardsv3/{did}" if (did and host) else "",
             "genie_url": f"{host}/embed/genie/rooms/{gid}" if (host and gid) else "",
-            "links": links}
+            "links": links, "enable_selffunded": ENABLE_SELFFUNDED}
 
 
 # The nine renewal activities — the single source of the Learn-panel copy.
@@ -496,6 +609,46 @@ def ingest_scan(payload: dict = Body(default={})):
         res = ingest_pipeline.process_file(local, actor="workbench-scan")
         processed.append({"file": os.path.basename(path), "status": res.get("status"), "doc_id": res.get("doc_id")})
     return {"processed": processed}
+
+
+@app.get("/api/quarantine/{doc_id}")
+def quarantine_detail(doc_id: str):
+    """Expected-vs-found per field for a quarantined/differs doc + the proposed re-map."""
+    d = query(f"SELECT doc_id, carrier, employer_group, policy_period, file_name, status, "
+              f"fields_found, fields_expected, reconciliation_detail, stored_path FROM {FQ}.`1_source_document` WHERE doc_id={sq(doc_id)}")
+    if not d:
+        raise HTTPException(404, "document not found")
+    doc = d[0]
+    detail = json.loads(doc.get("reconciliation_detail") or "{}")
+    tmpl = query(f"SELECT field_map, template_version FROM {FQ}.`0_carrier_template` "
+                 f"WHERE carrier={sq(doc['carrier'])} AND doc_family='renewal_exhibit' ORDER BY template_version DESC")
+    anchors = {}
+    if tmpl:
+        try:
+            for f, a in json.loads(tmpl[0]["field_map"] or "{}").items():
+                anchors[f] = a.split("/", 1)[-1].split("|")[0] if isinstance(a, str) else a
+        except Exception:
+            pass
+    return {"document": doc, "detail": detail, "template_anchors": anchors,
+            "template_version": tmpl[0]["template_version"] if tmpl else None}
+
+
+@app.post("/api/quarantine/accept")
+def quarantine_accept(payload: dict = Body(...)):
+    import ingest_pipeline
+    return ingest_pipeline.accept_remap(payload["doc_id"], actor=payload.get("actor") or "workbench-user")
+
+
+@app.post("/api/quarantine/reject")
+def quarantine_reject(payload: dict = Body(...)):
+    import ingest_pipeline
+    return ingest_pipeline.reject_doc(payload["doc_id"], payload.get("reason", ""), actor=payload.get("actor") or "workbench-user")
+
+
+@app.get("/api/template/history")
+def template_history(carrier: str):
+    return query(f"SELECT carrier, template_version, doc_family, field_map, field_count, status "
+                 f"FROM {FQ}.`0_carrier_template` WHERE carrier={sq(carrier)} ORDER BY doc_family, template_version")
 
 
 RESEED_JOB_NAME = "[hb-renewal] demo reset (reseed)"

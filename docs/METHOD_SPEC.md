@@ -38,3 +38,27 @@ broker adjustment. **Manual pool increase is carrier-provided and rendered locke
 the local regression test (`tests/test_regression.py`) asserts reproduction to 4 dp against the
 (local, gitignored) reference. The method is illustrative — the intent is to show a governed,
 reproducible workflow, not to certify a rate selection.
+
+## Addendum — self-funded projection (WP1, flag-gated)
+
+Governed by `fn_selffunded_projection`, which computes the FI build-up above and then prices the
+same group self-funded on the **same experience base** (a like-for-like comparison starts from the
+same projected claim cost). All PMPM; annualised as `× current members × 12`.
+
+| Line | Formula |
+|---|---|
+| Expected retained claims | max(projected medical PMPM − projected excess PMPM − expected-claims credit, 0) |
+| Fixed costs | ASO fee + network access + advisor fee |
+| Total self-funded cost | expected retained + ISL premium + ASL premium + fixed costs |
+| Fully-insured cost | current premium PMPM × (1 + quoted change) *(= FI billed premium)* |
+| Expected saving | fully-insured − total self-funded (also as % of FI) |
+| ASL attachment | expected retained × aggregate corridor |
+| Maximum liability | ASL attachment + ISL premium + ASL premium + fixed costs |
+| Worst case vs FI | maximum liability / fully-insured − 1 |
+
+Under self-funding the employer **retains** expected claims below the individual stop-loss (ISL)
+point and buys ISL cover for the layer above (which the FI rate had removed as projected excess),
+so that excess element moves out of retained claims and into ISL premium. **Stop-loss and admin
+PMPMs are labelled assumptions** (quoted from the stop-loss market), not derived from the exhibit.
+Offline test: `tests/test_selffunded.py` (payoff identities + inline-formula parity with
+`app/selffunded.py`). Ships behind `ENABLE_SELFFUNDED`, **off by default**.

@@ -167,11 +167,13 @@ def build(path, p, *, broken=False):
 
     ws = wb.create_sheet("Rate Development")
     ws["A1"] = f"{CLIENT} — Rate Development"; ws["A1"].font = HDR
-    # Broken: rename a key label and drop Member Months so extraction misses fields.
+    # Broken: two core labels RENAMED (values kept) so the deterministic path misses them
+    # but the AI path can still find them — a quarantine that a template re-map can resolve.
     trend_label = "Trend Rate (annual)" if broken else "Annual Trend"
+    mm_label = "Covered Life-Months" if broken else "Member Months"
     rows = [
         ("Total Months of Experience", p["months_experience"], None),
-        (None if broken else "Member Months", p["member_months"], None),
+        (mm_label, p["member_months"], None),
         ("Individual Pooling Point", p["pooling_point"], None),
         ("Current members", p["current_members"], None),
         ("Total Incurred Claims", round(d["incurred_pmpm"], 6), round(p["total_incurred_annual"], 2)),

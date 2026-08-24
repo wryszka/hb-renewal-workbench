@@ -23,8 +23,8 @@ A: One, config-driven. Each new carrier is a template entry, not a rebuild.
 → show: beat 2 (carrier template registry) / Learn node 2.
 
 **5. Self-funded scenarios?**
-A: Engine exists, V2 wiring. Same levers, different funding math, same decision record.
-→ show: roadmap (not in this build).
+A: Built and governed — the same experience priced self-funded (carrier premium vs expected cost vs max liability) by a UC function, saved as an FI/SF decision. It's behind a flag, off today, until we set the stop-loss and admin numbers with you.
+→ show: Roadmap panel (flag-gated item); can be switched on for a follow-up.
 
 **6. How do we know the extraction is right?**
 A: Two independent paths must agree, field by field — **17/17** on this file. Disagreement = quarantine.
@@ -83,7 +83,7 @@ A: You can do pieces. What compounds is one governed spine: same data, method, r
 → show: beat 12 (finale).
 
 **18. What would production take?**
-A: Carrier templates, your benchmarks seeded, access model, self-funded wiring. Weeks per increment, not a program.
+A: Carrier templates, your benchmarks seeded, access model, an approval workflow. Weeks per increment, not a program.
 → show: roadmap (`ROADMAP.md`).
 
 **19. Where does AI fit — is it deciding?**

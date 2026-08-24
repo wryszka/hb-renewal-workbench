@@ -144,6 +144,8 @@
   <h2>Save scenario</h2><div class="mut" style="font-size:12.5px;margin-bottom:6px">Retained as a governed decision with full audit and lineage.</div>
   <label>Scenario name</label><input id="sc_name" placeholder="e.g. Trend held to book">
   <label>Reason (required)</label><textarea id="sc_reason" rows="3" placeholder="Why this position — for the record and the audit trail"></textarea>
+  <div id="sc_funding_wrap" style="display:none"><label>Funding arrangement</label>
+    <select id="sc_funding" style="width:100%;padding:8px;border:1px solid var(--line2);border-radius:8px;font:inherit"><option value="FI">Fully insured (carrier)</option><option value="SF">Self-funded</option></select></div>
   <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">
     <button class="ghost" onclick="closeModal()">Cancel</button><button class="act" onclick="doSave()">Save decision</button></div>
 </div></div>
@@ -153,6 +155,7 @@ const $=s=>document.querySelector(s); const el=(t,c,h)=>{const e=document.create
 const pct=x=>x==null?"—":(x*100).toFixed(1)+"%"; const usd=x=>x==null?"—":"$"+Math.round(x).toLocaleString();
 const api=(u,o)=>fetch(u,o).then(r=>r.json());
 let STATE={view:"home",doc:null,inputs:null,overrides:{}};
+let CFG={};  // app config (feature flags + workspace links), loaded once at boot
 const NAV=[
   ["Overview",[["home","Daily view","🏠"],["dashboard","Dashboard","📈"]]],
   ["Pipeline",[["ingestion","Ingestion","📥"],["book","Book","📖"]]],
@@ -475,7 +478,7 @@ async function renderBook(){
   function draw(){const q=search.value.trim().toLowerCase();
     const rows=docs.filter(d=>(curStatus==="all"||d.status===curStatus)&&(!q||(d.carrier+" "+d.employer_group).toLowerCase().includes(q)));
     tb.innerHTML="";
-    rows.forEach(d=>{const clk=d.status==='active'||d.status==='differs';const tr=el("tr",clk||d.status==='quarantined'?"row":"");
+    rows.forEach(d=>{const clk=d.status==='active'||d.status==='differs'||d.status==='superseded';const tr=el("tr",clk||d.status==='quarantined'?"row":"");
       tr.innerHTML=`<td>${d.carrier}</td><td>${d.employer_group}</td><td class=mut>${d.policy_period}</td>
         <td><span class="chip ${d.status}">${d.status}</span></td><td class=num>${pct(d.carrier_action)}</td>
         <td class=num>${d.n_scenarios?pct(d.latest_scenario_action):'<span class=mut>none</span>'}</td><td class=num>${d.fields_found}/${d.fields_expected}</td>`;
@@ -484,12 +487,52 @@ async function renderBook(){
     cnt.textContent=`${rows.length} of ${docs.length} renewals`;}
   search.oninput=draw;draw();m.appendChild(c);
 }
-async function openQuarantine(id){const d=await api("/api/document/"+id);const m=$("#main");m.innerHTML="";
-  const c=el("div","card");c.appendChild(el("div","eyebrow","Assurance · quarantine"));
-  c.appendChild(el("h2",null,"Quarantined file — "+d.document.file_name));
-  c.appendChild(el("div","banner","The pipeline <b>refused this file rather than guessing</b>. Extraction recovered "+d.document.fields_found+"/"+d.document.fields_expected+" fields; a human confirms before anything is priced."));
-  c.appendChild(el("h3",null,"Field-level diff"));c.appendChild(el("pre",null,JSON.stringify(JSON.parse(d.document.reconciliation_detail||"{}"),null,2)));
-  const back=el("button","ghost","← Back");back.onclick=()=>go(STATE.view==='ingestion'?'ingestion':'book');c.appendChild(back);m.appendChild(c);}
+async function openQuarantine(id){const m=$("#main");m.innerHTML='<div class="card"><div class="mut"><span class="spin"></span> loading…</div></div>';
+  const r=await api("/api/quarantine/"+id).catch(e=>({error:String(e)}));
+  if(!r||r.error||!r.document){m.innerHTML='<div class="card"><div class="banner">Could not load: '+((r&&r.error)||'?')+'</div></div>';return;}
+  const doc=r.document,detail=r.detail||{},anchors=r.template_anchors||{};m.innerHTML="";
+  const c=el("div","card");c.appendChild(el("div","eyebrow","Assurance · "+doc.status));
+  c.appendChild(el("h2",null,"Held for review — "+doc.file_name));
+  c.appendChild(el("div","banner","The pipeline <b>refused this file rather than guessing</b> — recovered <b>"+doc.fields_found+"/"+doc.fields_expected+"</b> fields. A human confirms the mapping once; nothing is priced until then."));
+  c.appendChild(el("h3",null,"Expected vs found"));
+  const t=el("table");t.innerHTML="<thead><tr><th>Field</th><th>Template expects</th><th class=num>Deterministic</th><th class=num>AI path</th><th>Status</th></tr></thead>";
+  const tb=el("tbody");(detail.fields||[]).forEach(f=>{const sev=f.status==='missing'?'high':f.status==='differs'?'medium':'low';
+    tb.appendChild(el("tr",null,`<td>${f.field}</td><td class=mut>${anchors[f.field]||'—'}</td>
+      <td class=num>${f.det!=null?f.det:'<span class=mut>—</span>'}</td>
+      <td class=num>${f.ai!=null?f.ai+(f.ai_label?` <span class=mut style="font-size:11px">(“${f.ai_label}”)</span>`:''):'<span class=mut>—</span>'}</td>
+      <td><span class="flag ${sev}">${f.status}</span></td>`));});
+  t.appendChild(tb);c.appendChild(t);
+  if((detail.missing_tabs||[]).length)c.appendChild(el("div","mut",'Missing tabs: '+detail.missing_tabs.join(", ")));
+  m.appendChild(c);
+  const remap=detail.proposed_remap||[];const rc=el("div","card");rc.appendChild(el("div","eyebrow","Resolution"));
+  if(remap.length){rc.appendChild(el("div",null,`<b>Proposed re-map</b> — the AI located ${remap.length} field(s) the template missed:`));
+    remap.forEach(x=>rc.appendChild(el("div","find",`<span class="flag low">re-map</span><span><b>${x.field}</b>: expected “${x.expected_label||'?'}”, found “<b>${x.found_label}</b>”</span>`)));
+    const ab=el("button","act","✓ Accept mapping & re-process");ab.style.marginTop="12px";const rout=el("div");rout.style.marginTop="10px";
+    ab.onclick=async()=>{if(!confirm("Accept this re-map?\nA new carrier template version is created (the old one is retained) and the same file re-processes."))return;
+      ab.disabled=true;rout.innerHTML='<div class="mut"><span class="spin"></span> learning template + re-processing…</div>';
+      const res=await api("/api/quarantine/accept",{method:"POST",headers:{'Content-Type':'application/json'},body:JSON.stringify({doc_id:id})}).catch(e=>({status:'error',detail:String(e)}));
+      if(res.status==='resolved'){rout.innerHTML="";rout.appendChild(el("div","banner",`✓ Resolved. Template <b>${res.template_version}</b> learned the mapping; the file re-processed as <b>${res.reprocessed&&res.reprocessed.status}</b>. The next drop of this layout sails through.`));
+        if(res.reprocessed&&res.reprocessed.doc_id){const ob=el("button","act","Open the now-active renewal →");ob.style.marginTop="8px";ob.onclick=()=>openDoc(res.reprocessed.doc_id);rout.appendChild(ob);}}
+      else{rout.innerHTML='<div class="banner">Could not resolve: '+(res.detail||res.status)+'</div>';ab.disabled=false;}};
+    rc.appendChild(ab);rc.appendChild(rout);}
+  else rc.appendChild(el("div","mut","No automatic re-map available (a required field is genuinely absent). Reject with a reason, or request a corrected file."));
+  const actions=el("div");actions.style.marginTop="12px";
+  const rj=el("button","ghost","✕ Reject with reason");
+  rj.onclick=async()=>{const reason=prompt("Reason for rejecting this file?");if(!reason)return;
+    const res=await api("/api/quarantine/reject",{method:"POST",headers:{'Content-Type':'application/json'},body:JSON.stringify({doc_id:id,reason})}).catch(e=>({status:'error'}));
+    alert(res.status==='rejected'?"Rejected and recorded in the audit trail.":"Reject failed.");go(STATE.view==='ingestion'?'ingestion':'book');};
+  const th=el("button","ghost","Template history");th.style.marginLeft="8px";th.onclick=()=>openTemplateHistory(doc.carrier);
+  const bk=el("button","ghost","← Back");bk.style.marginLeft="8px";bk.onclick=()=>go(STATE.view==='ingestion'?'ingestion':'book');
+  actions.append(rj,th,bk);rc.appendChild(actions);const thw=el("div");thw.id="thist";rc.appendChild(thw);m.appendChild(rc);}
+async function openTemplateHistory(carrier){const w=$("#thist");if(!w)return;w.style.marginTop="14px";w.innerHTML='<div class="mut"><span class="spin"></span> loading template history…</div>';
+  const rows=await api("/api/template/history?carrier="+encodeURIComponent(carrier)).catch(()=>[]);
+  w.innerHTML="";const c=el("div","card");c.style.borderColor="var(--brand-line)";
+  c.appendChild(el("div","eyebrow","Carrier template history · "+carrier));
+  c.appendChild(el("div","mut","Append-only: a new version is written when a mapping is learned; old versions are retained — the learned-carrier story, made visible."));
+  const t=el("table");t.innerHTML="<thead><tr><th>Version</th><th>Doc family</th><th class=num>Fields mapped</th><th>Status</th></tr></thead>";
+  const tb=el("tbody");rows.forEach(r=>{let n=0;try{n=Object.keys(JSON.parse(r.field_map||"{}")).length;}catch(e){}
+    tb.appendChild(el("tr",null,`<td><b>${r.template_version}</b></td><td class=mut>${r.doc_family}</td><td class=num>${n}</td><td><span class="chip ${r.status==='active'?'active':'plain'}">${r.status}</span></td>`));});
+  t.appendChild(tb);c.appendChild(t);w.appendChild(c);}
 async function openDoc(id){const m=$("#main");
   m.innerHTML='<div class="card"><div class="mut" style="padding:6px 0"><span class="spin"></span> Opening renewal workspace — reproducing the build-up via the governed function…</div></div>';
   try{const d=await api("/api/document/"+id);STATE.doc=d;STATE.inputs=d.inputs;STATE.overrides={};go("workspace");}
@@ -520,6 +563,7 @@ async function renderWorkspace(){const m=$("#main");m.innerHTML="";if(!STATE.doc
   const exp=el("div","card");exp.style.padding="14px 20px";exp.appendChild(explainer("The build-up on the left is the carrier's renewal exhibit, reproduced line by line by a governed Unity Catalog function — not math in this app. Move a lever on the right to negotiate; the preview updates instantly, and the governed function records the number when you save. Save the position as a decision with a reason and it is retained with full audit and lineage."));exp.appendChild(howGlyph(3));
   m.appendChild(exp);
   if(d.reforecast_months>12){const b=el("div","banner");b.innerHTML="📈 <b>Fresh data available</b> — "+d.reforecast_months+" claims months loaded (a new month arrived). The projected action can be recomputed on the fresher experience.";m.appendChild(b);}
+  await renderVersions(m,doc.doc_id);
   const g=el("div","grid2");
   const ex=el("div","card");ex.appendChild(el("div","eyebrow","Carrier build-up"));const t=el("table");t.id="exhibit";ex.appendChild(t);g.appendChild(ex);
   const lv=el("div","card");lv.appendChild(el("div","eyebrow","Negotiation levers"));
@@ -545,6 +589,48 @@ async function renderWorkspace(){const m=$("#main");m.innerHTML="";if(!STATE.doc
   actions.append(bSave,bSum,bLin);m.appendChild(actions);
   const sb=el("div","card");sb.id="extra";sb.style.display="none";m.appendChild(sb);
   recompute();await renderCompare();
+  if(CFG.enable_selffunded)await renderSelfFunded(m,doc);
+}
+async function renderSelfFunded(m,doc){
+  const c=el("div","card");c.appendChild(el("div","eyebrow","Funding arrangement · self-funded path"));
+  c.appendChild(explainer("The same experience, priced self-funded: the employer retains expected claims up to an individual stop-loss point, buys stop-loss cover for the layer above, and pays admin (ASO) fees — instead of the carrier's fully-insured premium. The stop-loss and admin PMPMs are labelled assumptions; the payoff is computed by the governed function fn_selffunded_projection on the same inputs as the fully-insured build-up."));c.appendChild(howGlyph(3));
+  const out=el("div");out.style.marginTop="10px";out.innerHTML='<div class="mut"><span class="spin"></span> pricing self-funded via fn_selffunded_projection…</div>';c.appendChild(out);
+  try{
+    const r=await api("/api/selffunded",{method:"POST",headers:{'Content-Type':'application/json'},body:JSON.stringify({doc_id:doc.doc_id,overrides:STATE.overrides})});
+    const p=r.payoff;out.innerHTML="";
+    const strip=el("div","strip");
+    strip.innerHTML=`<div><div class=lbl>Carrier premium (FI) / yr</div><div class=big>${usd(p.fully_insured_annual)}</div></div>
+      <div><div class=lbl>Expected self-funded cost / yr</div><div class="big ${p.annual_saving>=0?'pos':'neg'}">${usd(p.total_self_funded_annual)}</div></div>
+      <div><div class=lbl>Expected saving / yr</div><div class="big ${p.annual_saving>=0?'pos':'neg'}">${usd(p.annual_saving)} · ${pct(p.saving_pct)}</div></div>
+      <div><div class=lbl>Maximum liability / yr</div><div class=big>${usd(p.max_liability_annual)}</div></div>`;
+    out.appendChild(strip);
+    const note=el("div","mut");note.style.marginTop="8px";
+    note.innerHTML=`PMPM — expected retained claims <b>${usd(p.expected_retained_claims_pmpm)}</b> · ISL premium ${usd(p.isl_premium_pmpm)} (@ $${Math.round(p.isl_point).toLocaleString()} stop-loss) · ASL premium ${usd(p.asl_premium_pmpm)} · fixed ${usd(p.fixed_costs_pmpm)}. Worst case is <b>${pct(p.worst_case_vs_fi_pct)}</b> vs the fully-insured premium. Stop-loss & admin PMPMs are assumptions, quoted from the stop-loss market.`;
+    out.appendChild(note);
+  }catch(e){out.innerHTML='<div class="mut">Self-funded path unavailable: '+e+'</div>';}
+  m.appendChild(c);
+}
+const VKIND={annual_trend:'%',months_of_trend:'num',target_loss_ratio:'%',demographic_adjustment:'f',less_pooled_claims_pmpm:'$',benefit_change:'f',credibility_experience_weight:'f',manual_rating_pool_increase:'%'};
+async function renderVersions(m,docId){
+  let v;try{v=await api("/api/versions/"+docId);}catch(e){return;}
+  if(!v||!v.chain||v.chain.length<2)return;
+  const c=el("div","card");c.appendChild(el("div","eyebrow","Version history"));
+  c.appendChild(explainer("This carrier resubmitted their exhibit. Every version is retained (append-only); the newest is active and the prior one is superseded. The field diff and the money impact below are computed by the same governed function that reproduces the build-up — nothing is estimated in the app. Decisions built on a superseded version are flagged so they can be recomputed on the latest data."));c.appendChild(howGlyph(7));
+  const chain=el("div");chain.style.margin="10px 0 4px";
+  v.chain.forEach(r=>{const row=el("div","find");
+    row.innerHTML=`<span class="chip ${r.status}">${r.status}</span><span><b>${r.file_name}</b> · ${(r.ingested_at||'').slice(0,16).replace('T',' ')} · governed action <b>${r.blended_rate_action!=null?pct(r.blended_rate_action):'—'}</b></span>`;
+    chain.appendChild(row);});
+  c.appendChild(chain);
+  if(v.diff&&v.diff.length){const t=el("table");t.style.marginTop="6px";
+    t.innerHTML="<thead><tr><th>Field changed</th><th class=num>Prior version</th><th class=num>Latest version</th></tr></thead>";
+    const tb=el("tbody");v.diff.forEach(d=>{const k=VKIND[d.field]||'n';
+      tb.appendChild(el("tr",null,`<td>${d.field.replace(/_/g,' ')}</td><td class=num>${fmt(d.old,k)}</td><td class="num" style="color:var(--brand);font-weight:700">${fmt(d.new,k)}</td>`));});
+    t.appendChild(tb);c.appendChild(t);}
+  if(v.impact){const b=el("div","banner");b.style.marginTop="10px";
+    const dir=v.impact.new_action<v.impact.old_action?"down":"up";
+    b.innerHTML=`📊 <b>Impact of the change:</b> the ask moves <b>${pct(v.impact.old_action)} → ${pct(v.impact.new_action)}</b> (${dir}), a swing of <b>${usd(Math.abs(v.impact.premium_delta_annual))}/yr</b> in billed premium — traced to fn_renewal_buildup on each version.`;
+    c.appendChild(b);}
+  m.appendChild(c);
 }
 function recompute(){const b=STATE.doc.baseline||computeBuildup(STATE.inputs);const s=computeBuildup(STATE.inputs,STATE.overrides);
   const t=$("#exhibit");t.innerHTML="<thead><tr><th>Line</th><th class=num>Carrier</th><th class=num>Scenario</th></tr></thead>";const tb=el("tbody");
@@ -562,15 +648,25 @@ async function renderCompare(){const d=await api("/api/document/"+STATE.doc.docu
   const t=el("table");t.innerHTML="<thead><tr><th>Scenario</th><th>By</th><th class=num>Action</th><th class=num>Δ vs carrier</th><th class=num>Value/yr</th><th>Reason</th></tr></thead>";
   const tb=el("tbody");const carrier=d.baseline?d.baseline.quoted_change:null;
   tb.appendChild(el("tr",null,`<td><b>Carrier proposal</b></td><td class=mut>—</td><td class=num>${pct(carrier)}</td><td class=num>—</td><td class=num>—</td><td class=mut>as received</td>`));
-  (d.scenarios||[]).forEach(s=>{tb.appendChild(el("tr",null,`<td>${s.scenario_name} <span class="chip plain">${s.status}</span></td><td class=mut>${(s.created_by||'').split('@')[0]}</td>
+  const stale=d.document.status==='superseded';  // this file was replaced — its decisions are built on data that moved
+  (d.scenarios||[]).forEach(s=>{const tr=el("tr",null,`<td>${s.scenario_name} <span class="chip plain">${s.status}</span>${stale?' <span class="chip superseded" title="Built on a superseded version">data moved</span>':''}</td><td class=mut>${(s.created_by||'').split('@')[0]}</td>
     <td class=num>${pct(s.scenario_action)}</td><td class=num>${carrier!=null?((s.scenario_action-carrier)*100).toFixed(1)+' pts':'—'}</td>
-    <td class="num pos">${usd(s.value_at_stake_annual)}</td><td class=mut>${s.reason||''}</td>`));});
-  t.appendChild(tb);c.appendChild(t);}
-function openModal(){$("#modal").style.display="flex";}
+    <td class="num pos">${usd(s.value_at_stake_annual)}</td><td class=mut>${s.reason||''}</td>`);tb.appendChild(tr);});
+  t.appendChild(tb);c.appendChild(t);
+  if(stale&&(d.scenarios||[]).length){const bar=el("div");bar.style.marginTop="10px";
+    const b=el("button","act","↻ Recompute decisions on the latest version");
+    b.onclick=async()=>{b.disabled=true;b.textContent="Recomputing on latest…";
+      try{let n=0;for(const s of d.scenarios){const r=await api("/api/scenario/recompute-latest",{method:"POST",headers:{'Content-Type':'application/json'},body:JSON.stringify({scenario_id:s.scenario_id})});n++;}
+        alert("Recomputed "+n+" decision(s) on the latest version — appended as fresh governed scenarios (originals retained). Open the active version to see them.");}
+      catch(e){alert("Recompute: "+e);b.disabled=false;b.textContent="↻ Recompute decisions on the latest version";}};
+    bar.appendChild(b);bar.appendChild(el("div","mut","This file was superseded by a newer carrier submission. Re-runs each decision's levers on the latest inputs via the governed function; the originals stay retained and audited."));
+    c.appendChild(bar);}}
+function openModal(){$("#modal").style.display="flex";const fw=$("#sc_funding_wrap");if(fw)fw.style.display=CFG.enable_selffunded?"block":"none";}
 function closeModal(){$("#modal").style.display="none";}
 async function doSave(){const name=$("#sc_name").value.trim(),reason=$("#sc_reason").value.trim();
   if(!name||!reason){alert("Name and reason are required.");return;}
-  const r=await api("/api/scenario",{method:"POST",headers:{'Content-Type':'application/json'},body:JSON.stringify({doc_id:STATE.doc.document.doc_id,scenario_name:name,reason,overrides:STATE.overrides})});
+  const funding=(CFG.enable_selffunded&&$("#sc_funding"))?$("#sc_funding").value:"FI";
+  const r=await api("/api/scenario",{method:"POST",headers:{'Content-Type':'application/json'},body:JSON.stringify({doc_id:STATE.doc.document.doc_id,scenario_name:name,reason,overrides:STATE.overrides,funding_type:funding})});
   closeModal();$("#sc_name").value="";$("#sc_reason").value="";alert("Saved "+r.scenario_id+" — "+usd(r.value_at_stake_annual)+"/yr at stake. Retained with audit + lineage.");renderCompare();}
 async function doSummary(){const sb=$("#extra");sb.style.display="block";sb.innerHTML="<div class=eyebrow>Executive summary</div><div class=mut><span class=spin></span> Drafting via Foundation Model API…</div>";
   const r=await api("/api/summary",{method:"POST",headers:{'Content-Type':'application/json'},body:JSON.stringify({doc_id:STATE.doc.document.doc_id,overrides:STATE.overrides})});
@@ -672,11 +768,16 @@ function renderRoadmap(){const m=$("#main");m.innerHTML="";
   const c=el("div","card");c.appendChild(el("div","eyebrow","Roadmap"));c.appendChild(el("h2",null,"Lined up for delivery"));
   c.appendChild(explainer("Everything else in this workbench is built and live. The items below are specced or planned — not yet built — shown so you can see where this goes next. All data here is synthetic."));
   m.appendChild(c);
-  const next=el("div","card");next.appendChild(el("div","eyebrow","Next up — specced, not yet built"));
-  [["Self-funded scenario path","Model the fully-insured → self-funded transition on the same experience base — individual stop-loss level, stop-loss premium, admin fees — showing the carrier's renewal premium vs expected self-funded cost vs maximum liability, side by side. Same governed method, same decision record."],
-   ["Quarantine → resolution (“confirm once”)","When a carrier changes their layout: review the field diff, accept the proposed re-map, and the carrier template learns a new version so the same file re-processes clean — or reject with a reason. Both audited. The control story, end to end."],
-   ["Changed-file version diff","When a carrier resubmits: see v1 → v2 field-by-field and the money impact (the ask moves e.g. 26.9% → 24.1%). Decisions built on the old version get a “data has moved” flag with one-click recompute — and reforecast gets its explicit old-vs-new."]
-  ].forEach(([t,b])=>{const w=el("div");w.style.margin="12px 0";w.innerHTML=`<div><span class="chip plain">Specced · next</span> <b style="font-size:14.5px">${t}</b></div><div class="mut" style="margin-top:5px;font-size:13px">${b}</div>`;next.appendChild(w);});
+  const shipped=el("div","card");shipped.appendChild(el("div","eyebrow","Shipped this iteration"));
+  [["Quarantine → resolution (“confirm once”)","When a carrier changes their layout the file is held; open it to see the field diff and the proposed re-map, accept it and the carrier template learns a new version so the same layout re-processes clean — or reject with a reason. Both fully audited. See it on the quarantined renewal in the Book.","book"],
+   ["Changed-file version diff","When a carrier resubmits, the renewal workspace shows every version (superseded → active), the field-by-field diff and the money impact, all from the governed function. Decisions built on a superseded version get a “data moved” flag with one-click recompute onto the latest."]
+  ].forEach(([t,b,view])=>{const w=el("div");w.style.margin="12px 0";const nav=view?` <a class="assetlink" href="javascript:void 0">open →</a>`:"";
+    w.innerHTML=`<div><span class="chip active">Shipped</span> <b style="font-size:14.5px">${t}</b></div><div class="mut" style="margin-top:5px;font-size:13px">${b}${nav}</div>`;
+    if(view){w.querySelector("a").onclick=e=>{e.preventDefault();go(view);};}shipped.appendChild(w);});
+  m.appendChild(shipped);
+  const next=el("div","card");next.appendChild(el("div","eyebrow","Built · behind a flag (off in this demo)"));
+  [["Self-funded scenario path","Models the fully-insured → self-funded transition on the same experience base — individual stop-loss level, stop-loss premium, admin fees — showing the carrier's renewal premium vs expected self-funded cost vs maximum liability, side by side. Priced by the governed function fn_selffunded_projection; saved as a decision tagged FI or SF. Ships behind ENABLE_SELFFUNDED, kept off here until the stop-loss assumptions are set with the client."]
+  ].forEach(([t,b])=>{const w=el("div");w.style.margin="12px 0";w.innerHTML=`<div><span class="chip plain">Flag-gated</span> <b style="font-size:14.5px">${t}</b></div><div class="mut" style="margin-top:5px;font-size:13px">${b}</div>`;next.appendChild(w);});
   m.appendChild(next);
   const later=el("div","card");later.appendChild(el("div","eyebrow","Also on the roadmap"));
   [["V2","Pharmacy-rebate document family — a second exhibit type through the same pipeline (a parser + a binding, not a rebuild)."],
@@ -759,6 +860,6 @@ async function openProvenance(eid){const w=$("#auditdetail");w.style.display="bl
   nodes.forEach((n,i)=>{chain.appendChild(el("span","node",n));if(i<nodes.length-1)chain.appendChild(el("span","arr","←"));});
   card.appendChild(chain);card.appendChild(dlOriginal(doc));w.appendChild(card);}
 
-renderNav();go("home");
+(async()=>{try{CFG=await api("/api/config");}catch(e){}renderNav();go("home");})();
 </script>
 </body></html>
