@@ -1,0 +1,25 @@
+# --- Confidential base-data: LOCAL ONLY, never committed or deployed ---
+# Real customer transcripts, the reference carrier exhibit, and any doc naming
+# real parties. The demo/deployable assets are fully synthetic (see hard rules).
+CORPUS.md
+APPENDIX_BUILT.md
+build_corpus.py
+MODEL_SPEC.md
+SUBMISSION_TO_DECISION.md
+REBUILD_PLAN.md
+POSTMORTEM_AND_PLAN.md
+data/reference_exhibit.json
+*.xlsx
+demo/
+# older confidential planning docs
+data/synthetic_hb_renewal.json
+# local-only forbidden-name scan term list (never committed)
+.scanlist.local
+
+# --- Environment / build ---
+.venv/
+.databricks/
+__pycache__/
+*.pyc
+.pytest_cache/
+.DS_Store

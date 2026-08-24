@@ -1,0 +1,777 @@
+{
+ "datasets": [
+  {
+   "name": "ds_bench",
+   "displayName": "By carrier",
+   "queryLines": [
+    "SELECT carrier, round(avg(book_trend_median),4) book_trend, round(avg(avg_carrier_action),4) carrier_action, ",
+    "round(avg(avg_negotiated_action),4) negotiated_action, round(avg(avg_negotiation_delta),4) delta, ",
+    "round(sum(total_value_negotiated),0) value_negotiated, sum(renewals_negotiated) renewals, ",
+    "CASE WHEN avg(book_trend_median)>=0.075 THEN 'Padder (rich)' WHEN avg(book_trend_median)<=0.06 THEN 'Fair' ELSE 'Mid' END flag ",
+    "FROM `lr_dev_aws_us_catalog`.`hb_renewal`.`6_book_trend_benchmark` GROUP BY carrier ORDER BY carrier_action DESC "
+   ]
+  },
+  {
+   "name": "ds_action",
+   "displayName": "Ask vs negotiated",
+   "queryLines": [
+    "SELECT carrier, 'Carrier ask' series, round(avg(avg_carrier_action),4) action FROM `lr_dev_aws_us_catalog`.`hb_renewal`.`6_book_trend_benchmark` GROUP BY carrier ",
+    "UNION ALL ",
+    "SELECT carrier, 'Our negotiated' series, round(avg(avg_negotiated_action),4) action FROM `lr_dev_aws_us_catalog`.`hb_renewal`.`6_book_trend_benchmark` GROUP BY carrier "
+   ]
+  },
+  {
+   "name": "ds_band",
+   "displayName": "By group band",
+   "queryLines": [
+    "SELECT group_band, round(avg(avg_carrier_action),4) carrier_action, round(avg(avg_negotiated_action),4) negotiated_action, ",
+    "sum(renewals_negotiated) renewals FROM `lr_dev_aws_us_catalog`.`hb_renewal`.`6_book_trend_benchmark` GROUP BY group_band ORDER BY group_band "
+   ]
+  },
+  {
+   "name": "ds_claims",
+   "displayName": "Claims experience",
+   "queryLines": [
+    "SELECT to_date(concat('01-',month),'dd-MMM-yyyy') month_date, round(sum(total_incurred),0) total_incurred, round(avg(pmpm),2) pmpm ",
+    "FROM `lr_dev_aws_us_catalog`.`hb_renewal`.`mv_claims_experience` GROUP BY month ORDER BY month_date "
+   ]
+  }
+ ],
+ "pages": [
+  {
+   "name": "main",
+   "displayName": "HB Renewal Book",
+   "pageType": "PAGE_TYPE_CANVAS",
+   "layoutVersion": "GRID_V1",
+   "layout": [
+    {
+     "widget": {
+      "name": "t_title",
+      "multilineTextboxSpec": {
+       "lines": [
+        "## Renewal book \u2014 carrier ask vs the position we negotiated"
+       ]
+      }
+     },
+     "position": {
+      "x": 0,
+      "y": 0,
+      "width": 12,
+      "height": 1
+     }
+    },
+    {
+     "widget": {
+      "name": "t_sub",
+      "multilineTextboxSpec": {
+       "lines": [
+        "Every retained decision, rolled up. All figures synthetic."
+       ]
+      }
+     },
+     "position": {
+      "x": 0,
+      "y": 1,
+      "width": 12,
+      "height": 1
+     }
+    },
+    {
+     "widget": {
+      "name": "k_renewals",
+      "queries": [
+       {
+        "name": "main_query",
+        "query": {
+         "datasetName": "ds_bench",
+         "fields": [
+          {
+           "name": "sum(renewals)",
+           "expression": "SUM(`renewals`)"
+          }
+         ],
+         "disaggregated": false
+        }
+       }
+      ],
+      "spec": {
+       "version": 2,
+       "widgetType": "counter",
+       "encodings": {
+        "value": {
+         "fieldName": "sum(renewals)",
+         "displayName": "Renewals negotiated",
+         "format": {
+          "type": "number",
+          "decimalPlaces": {
+           "type": "exact",
+           "places": 0
+          }
+         }
+        }
+       },
+       "frame": {
+        "showTitle": true,
+        "title": "Renewals negotiated"
+       }
+      }
+     },
+     "position": {
+      "x": 0,
+      "y": 2,
+      "width": 3,
+      "height": 3
+     }
+    },
+    {
+     "widget": {
+      "name": "k_ask",
+      "queries": [
+       {
+        "name": "main_query",
+        "query": {
+         "datasetName": "ds_bench",
+         "fields": [
+          {
+           "name": "avg(carrier_action)",
+           "expression": "AVG(`carrier_action`)"
+          }
+         ],
+         "disaggregated": false
+        }
+       }
+      ],
+      "spec": {
+       "version": 2,
+       "widgetType": "counter",
+       "encodings": {
+        "value": {
+         "fieldName": "avg(carrier_action)",
+         "displayName": "Avg carrier ask",
+         "format": {
+          "type": "number-percent",
+          "decimalPlaces": {
+           "type": "max",
+           "places": 1
+          }
+         }
+        }
+       },
+       "frame": {
+        "showTitle": true,
+        "title": "Avg carrier ask"
+       }
+      }
+     },
+     "position": {
+      "x": 3,
+      "y": 2,
+      "width": 3,
+      "height": 3
+     }
+    },
+    {
+     "widget": {
+      "name": "k_neg",
+      "queries": [
+       {
+        "name": "main_query",
+        "query": {
+         "datasetName": "ds_bench",
+         "fields": [
+          {
+           "name": "avg(negotiated_action)",
+           "expression": "AVG(`negotiated_action`)"
+          }
+         ],
+         "disaggregated": false
+        }
+       }
+      ],
+      "spec": {
+       "version": 2,
+       "widgetType": "counter",
+       "encodings": {
+        "value": {
+         "fieldName": "avg(negotiated_action)",
+         "displayName": "Avg negotiated",
+         "format": {
+          "type": "number-percent",
+          "decimalPlaces": {
+           "type": "max",
+           "places": 1
+          }
+         }
+        }
+       },
+       "frame": {
+        "showTitle": true,
+        "title": "Avg negotiated"
+       }
+      }
+     },
+     "position": {
+      "x": 6,
+      "y": 2,
+      "width": 3,
+      "height": 3
+     }
+    },
+    {
+     "widget": {
+      "name": "k_value",
+      "queries": [
+       {
+        "name": "main_query",
+        "query": {
+         "datasetName": "ds_bench",
+         "fields": [
+          {
+           "name": "sum(value_negotiated)",
+           "expression": "SUM(`value_negotiated`)"
+          }
+         ],
+         "disaggregated": false
+        }
+       }
+      ],
+      "spec": {
+       "version": 2,
+       "widgetType": "counter",
+       "encodings": {
+        "value": {
+         "fieldName": "sum(value_negotiated)",
+         "displayName": "Value negotiated / yr",
+         "format": {
+          "type": "number-currency",
+          "currencyCode": "USD",
+          "abbreviation": "compact",
+          "decimalPlaces": {
+           "type": "max",
+           "places": 1
+          }
+         }
+        }
+       },
+       "frame": {
+        "showTitle": true,
+        "title": "Value negotiated / yr"
+       }
+      }
+     },
+     "position": {
+      "x": 9,
+      "y": 2,
+      "width": 3,
+      "height": 3
+     }
+    },
+    {
+     "widget": {
+      "name": "t_neg",
+      "multilineTextboxSpec": {
+       "lines": [
+        "### Negotiation by carrier"
+       ]
+      }
+     },
+     "position": {
+      "x": 0,
+      "y": 5,
+      "width": 12,
+      "height": 1
+     }
+    },
+    {
+     "widget": {
+      "name": "w_ask",
+      "queries": [
+       {
+        "name": "main_query",
+        "query": {
+         "datasetName": "ds_action",
+         "fields": [
+          {
+           "name": "carrier",
+           "expression": "`carrier`"
+          },
+          {
+           "name": "action",
+           "expression": "`action`"
+          },
+          {
+           "name": "series",
+           "expression": "`series`"
+          }
+         ],
+         "disaggregated": true
+        }
+       }
+      ],
+      "spec": {
+       "version": 3,
+       "widgetType": "bar",
+       "encodings": {
+        "x": {
+         "fieldName": "carrier",
+         "scale": {
+          "type": "categorical"
+         }
+        },
+        "y": {
+         "fieldName": "action",
+         "scale": {
+          "type": "quantitative"
+         },
+         "format": {
+          "type": "number-percent",
+          "decimalPlaces": {
+           "type": "max",
+           "places": 1
+          }
+         }
+        },
+        "color": {
+         "fieldName": "series",
+         "scale": {
+          "type": "categorical",
+          "mappings": [
+           {
+            "value": "Carrier ask",
+            "color": "#E69F00"
+           },
+           {
+            "value": "Our negotiated",
+            "color": "#009E73"
+           }
+          ]
+         }
+        }
+       },
+       "frame": {
+        "title": "Carrier ask vs our negotiated position",
+        "showTitle": true
+       },
+       "mark": {
+        "layout": "group"
+       }
+      }
+     },
+     "position": {
+      "x": 0,
+      "y": 6,
+      "width": 6,
+      "height": 6
+     }
+    },
+    {
+     "widget": {
+      "name": "w_value",
+      "queries": [
+       {
+        "name": "main_query",
+        "query": {
+         "datasetName": "ds_bench",
+         "fields": [
+          {
+           "name": "carrier",
+           "expression": "`carrier`"
+          },
+          {
+           "name": "value_negotiated",
+           "expression": "`value_negotiated`"
+          },
+          {
+           "name": "carrier",
+           "expression": "`carrier`"
+          }
+         ],
+         "disaggregated": true
+        }
+       }
+      ],
+      "spec": {
+       "version": 3,
+       "widgetType": "bar",
+       "encodings": {
+        "x": {
+         "fieldName": "carrier",
+         "scale": {
+          "type": "categorical"
+         }
+        },
+        "y": {
+         "fieldName": "value_negotiated",
+         "scale": {
+          "type": "quantitative"
+         },
+         "format": {
+          "type": "number-currency",
+          "currencyCode": "USD",
+          "abbreviation": "compact",
+          "decimalPlaces": {
+           "type": "max",
+           "places": 1
+          }
+         }
+        },
+        "color": {
+         "fieldName": "carrier",
+         "scale": {
+          "type": "categorical"
+         }
+        }
+       },
+       "frame": {
+        "title": "Value negotiated by carrier ($/yr)",
+        "showTitle": true
+       }
+      }
+     },
+     "position": {
+      "x": 6,
+      "y": 6,
+      "width": 6,
+      "height": 6
+     }
+    },
+    {
+     "widget": {
+      "name": "t_book",
+      "multilineTextboxSpec": {
+       "lines": [
+        "### Who runs rich \u00b7 book mix"
+       ]
+      }
+     },
+     "position": {
+      "x": 0,
+      "y": 12,
+      "width": 12,
+      "height": 1
+     }
+    },
+    {
+     "widget": {
+      "name": "w_trend",
+      "queries": [
+       {
+        "name": "main_query",
+        "query": {
+         "datasetName": "ds_bench",
+         "fields": [
+          {
+           "name": "carrier",
+           "expression": "`carrier`"
+          },
+          {
+           "name": "book_trend",
+           "expression": "`book_trend`"
+          },
+          {
+           "name": "flag",
+           "expression": "`flag`"
+          }
+         ],
+         "disaggregated": true
+        }
+       }
+      ],
+      "spec": {
+       "version": 3,
+       "widgetType": "bar",
+       "encodings": {
+        "x": {
+         "fieldName": "carrier",
+         "scale": {
+          "type": "categorical"
+         }
+        },
+        "y": {
+         "fieldName": "book_trend",
+         "scale": {
+          "type": "quantitative"
+         },
+         "format": {
+          "type": "number-percent",
+          "decimalPlaces": {
+           "type": "max",
+           "places": 1
+          }
+         }
+        },
+        "color": {
+         "fieldName": "flag",
+         "scale": {
+          "type": "categorical",
+          "mappings": [
+           {
+            "value": "Padder (rich)",
+            "color": "#D55E00"
+           },
+           {
+            "value": "Fair",
+            "color": "#009E73"
+           },
+           {
+            "value": "Mid",
+            "color": "#56B4E9"
+           }
+          ]
+         }
+        }
+       },
+       "frame": {
+        "title": "Book trend by carrier (padder = rich)",
+        "showTitle": true
+       }
+      }
+     },
+     "position": {
+      "x": 0,
+      "y": 13,
+      "width": 4,
+      "height": 6
+     }
+    },
+    {
+     "widget": {
+      "name": "w_band",
+      "queries": [
+       {
+        "name": "main_query",
+        "query": {
+         "datasetName": "ds_band",
+         "fields": [
+          {
+           "name": "group_band",
+           "expression": "`group_band`"
+          },
+          {
+           "name": "carrier_action",
+           "expression": "`carrier_action`"
+          },
+          {
+           "name": "group_band",
+           "expression": "`group_band`"
+          }
+         ],
+         "disaggregated": true
+        }
+       }
+      ],
+      "spec": {
+       "version": 3,
+       "widgetType": "bar",
+       "encodings": {
+        "x": {
+         "fieldName": "group_band",
+         "scale": {
+          "type": "categorical"
+         }
+        },
+        "y": {
+         "fieldName": "carrier_action",
+         "scale": {
+          "type": "quantitative"
+         },
+         "format": {
+          "type": "number-percent",
+          "decimalPlaces": {
+           "type": "max",
+           "places": 1
+          }
+         }
+        },
+        "color": {
+         "fieldName": "group_band",
+         "scale": {
+          "type": "categorical"
+         }
+        }
+       },
+       "frame": {
+        "title": "Carrier action by group-size band",
+        "showTitle": true
+       }
+      }
+     },
+     "position": {
+      "x": 4,
+      "y": 13,
+      "width": 4,
+      "height": 6
+     }
+    },
+    {
+     "widget": {
+      "name": "w_mix",
+      "queries": [
+       {
+        "name": "main_query",
+        "query": {
+         "datasetName": "ds_band",
+         "fields": [
+          {
+           "name": "renewals",
+           "expression": "`renewals`"
+          },
+          {
+           "name": "group_band",
+           "expression": "`group_band`"
+          }
+         ],
+         "disaggregated": true
+        }
+       }
+      ],
+      "spec": {
+       "version": 3,
+       "widgetType": "pie",
+       "encodings": {
+        "angle": {
+         "fieldName": "renewals",
+         "scale": {
+          "type": "quantitative"
+         }
+        },
+        "color": {
+         "fieldName": "group_band",
+         "scale": {
+          "type": "categorical"
+         }
+        },
+        "label": {
+         "show": true
+        }
+       },
+       "frame": {
+        "title": "Renewals by group-size band",
+        "showTitle": true
+       }
+      }
+     },
+     "position": {
+      "x": 8,
+      "y": 13,
+      "width": 4,
+      "height": 6
+     }
+    },
+    {
+     "widget": {
+      "name": "t_claims",
+      "multilineTextboxSpec": {
+       "lines": [
+        "### Claims experience \u2014 active renewal"
+       ]
+      }
+     },
+     "position": {
+      "x": 0,
+      "y": 19,
+      "width": 12,
+      "height": 1
+     }
+    },
+    {
+     "widget": {
+      "name": "w_claims",
+      "queries": [
+       {
+        "name": "main_query",
+        "query": {
+         "datasetName": "ds_claims",
+         "fields": [
+          {
+           "name": "month_date",
+           "expression": "`month_date`"
+          },
+          {
+           "name": "total_incurred",
+           "expression": "`total_incurred`"
+          }
+         ],
+         "disaggregated": true
+        }
+       }
+      ],
+      "spec": {
+       "version": 3,
+       "widgetType": "line",
+       "encodings": {
+        "x": {
+         "fieldName": "month_date",
+         "scale": {
+          "type": "temporal"
+         }
+        },
+        "y": {
+         "fieldName": "total_incurred",
+         "scale": {
+          "type": "quantitative"
+         },
+         "format": {
+          "type": "number-currency",
+          "currencyCode": "USD",
+          "abbreviation": "compact",
+          "decimalPlaces": {
+           "type": "max",
+           "places": 1
+          }
+         }
+        }
+       },
+       "frame": {
+        "title": "Monthly incurred claims ($)",
+        "showTitle": true
+       }
+      }
+     },
+     "position": {
+      "x": 0,
+      "y": 20,
+      "width": 12,
+      "height": 6
+     }
+    }
+   ]
+  }
+ ],
+ "uiSettings": {
+  "theme": {
+   "canvasBackgroundColor": {
+    "light": "#FCFCFC",
+    "dark": "#1F272D"
+   },
+   "widgetBackgroundColor": {
+    "light": "#FFFFFF",
+    "dark": "#11171C"
+   },
+   "fontColor": {
+    "light": "#11171C",
+    "dark": "#E8ECF0"
+   },
+   "selectionColor": {
+    "light": "#2272B4",
+    "dark": "#8ACAFF"
+   },
+   "visualizationColors": [
+    "#0072B2",
+    "#E69F00",
+    "#009E73",
+    "#CC79A7",
+    "#D55E00",
+    "#56B4E9",
+    "#F0E442"
+   ],
+   "widgetHeaderAlignment": "LEFT",
+   "widgetCornerRadius": 10
+  },
+  "genieSpace": {
+   "isEnabled": true,
+   "overrideId": "01f19d63fe03198a95c55b64a81ea535",
+   "enablementMode": "ENABLED"
+  }
+ }
+}

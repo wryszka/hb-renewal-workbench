@@ -1,0 +1,739 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HB Renewal Workbench</title>
+<style>
+  :root{
+    --ink:#0f172a; --slate:#1e293b; --slate2:#334155; --bg:#f1f5f9; --card:#fff;
+    --line:#e2e8f0; --line2:#cbd5e1; --mut:#64748b; --mut2:#94a3b8;
+    --brand:#2563eb; --brand-d:#1d4ed8; --brand-soft:#eff6ff; --brand-line:#bfdbfe;
+    --emerald:#059669; --emerald-bg:#d1fae5; --emerald-ink:#065f46;
+    --amber:#b45309; --amber-bg:#fef3c7; --amber-ink:#92400e;
+    --red:#dc2626; --red-bg:#fee2e2; --red-ink:#991b1b;
+    --shadow:0 1px 2px rgba(15,23,42,.06),0 1px 3px rgba(15,23,42,.05);
+    --shadow-lg:0 10px 24px -8px rgba(15,23,42,.25);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:14px/1.55 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+  .app{display:flex;min-height:100vh}
+  /* sidebar */
+  .sidebar{width:252px;background:linear-gradient(180deg,#0f172a,#172033);color:#cbd5e1;flex-shrink:0;
+    display:flex;flex-direction:column;position:fixed;height:100vh;border-right:1px solid rgba(255,255,255,.06);z-index:5}
+  .brand{display:flex;align-items:center;gap:11px;padding:16px}
+  .brickmark{width:32px;height:32px;border-radius:8px;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:2.5px;padding:4px;background:rgba(255,255,255,.08);flex-shrink:0}
+  .brickmark i{background:#34d399;border-radius:2px;display:block}
+  .brickmark i:nth-child(2){background:#60a5fa}.brickmark i:nth-child(3){background:#60a5fa}.brickmark i:nth-child(4){background:#34d399}
+  .brand .bt{font-weight:800;color:#fff;font-size:15px;letter-spacing:-.01em} .brand .bs{font-size:11px;color:#94a3b8;margin-top:1px}
+  .nav{flex:1;display:flex;flex-direction:column;padding:8px 10px;overflow:auto}
+  .nav .nav-div{margin:auto 10px 4px;border-top:1px solid rgba(255,255,255,.08)}
+  .nav-section{font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#5b6878;padding:15px 10px 5px}
+  .nav a{display:flex;align-items:center;gap:11px;padding:9px 11px;border-radius:9px;color:#cbd5e1;
+    font-size:13.5px;margin:1px 0;cursor:pointer;transition:background .12s,color .12s}
+  .nav a:hover{background:rgba(255,255,255,.06);color:#fff}
+  .nav a.active{background:linear-gradient(135deg,#2563eb,#3b82f6);color:#fff;font-weight:600;box-shadow:0 2px 8px rgba(37,99,235,.35)}
+  .nav a .ic{width:18px;text-align:center;font-size:14px}
+  .side-foot{padding:14px 16px;border-top:1px solid rgba(255,255,255,.08);font-size:11px;color:#7c8797}
+  .side-foot .pill{display:inline-block;margin-top:7px;padding:2px 9px;border-radius:999px;background:rgba(52,211,153,.14);color:#34d399;font-weight:700;font-size:10px;letter-spacing:.05em}
+  /* main */
+  .main{margin-left:252px;flex:1;padding:26px 32px 60px;max-width:1200px;width:100%}
+  @media(max-width:820px){.sidebar{position:static;width:100%;height:auto}.main{margin-left:0}}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px;margin-bottom:18px;box-shadow:var(--shadow)}
+  h2{font-size:17px;margin:0 0 4px;letter-spacing:-.01em;font-weight:700}
+  .eyebrow{font-size:11px;text-transform:uppercase;letter-spacing:.11em;font-weight:700;color:var(--mut);margin:0 0 12px}
+  h3{font-size:11px;text-transform:uppercase;letter-spacing:.09em;color:var(--mut);margin:18px 0 8px;font-weight:700}
+  table{border-collapse:collapse;width:100%;font-size:13px}
+  th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line)}
+  thead th{color:var(--mut);font-weight:700;font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;background:#f8fafc}
+  td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+  .row{cursor:pointer} tbody tr{transition:background .1s} .row:hover{background:var(--brand-soft)}
+  .chip{display:inline-block;padding:2px 9px;border-radius:20px;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;border:1px solid transparent}
+  .chip.active{background:var(--emerald-bg);color:var(--emerald-ink);border-color:#a7f3d0}
+  .chip.quarantined{background:var(--red-bg);color:var(--red-ink);border-color:#fecaca}
+  .chip.differs{background:var(--amber-bg);color:var(--amber-ink);border-color:#fde68a}
+  .chip.superseded{background:#f1f5f9;color:var(--mut);border-color:var(--line2)}
+  .chip.plain{background:#f1f5f9;color:var(--mut);border-color:var(--line)}
+  .flag{font-size:9.5px;font-weight:800;padding:1px 7px;border-radius:20px;text-transform:uppercase;letter-spacing:.06em;border:1px solid transparent}
+  .flag.high{background:var(--red-bg);color:var(--red-ink);border-color:#fecaca}
+  .flag.medium{background:var(--amber-bg);color:var(--amber-ink);border-color:#fde68a}
+  .flag.low{background:#f1f5f9;color:var(--mut);border-color:var(--line2)}
+  .flag.ok{background:var(--emerald-bg);color:var(--emerald-ink);border-color:#a7f3d0}
+  .flag.padder{background:var(--amber-bg);color:var(--amber-ink);border-color:#fde68a}
+  .flag.fair{background:var(--emerald-bg);color:var(--emerald-ink);border-color:#a7f3d0}
+  button.act{background:var(--brand);color:#fff;border:none;border-radius:9px;padding:9px 16px;cursor:pointer;font-size:13px;font-weight:600;box-shadow:var(--shadow);transition:background .15s}
+  button.act:hover{background:var(--brand-d)}
+  button.ghost{background:#fff;border:1px solid var(--line2);border-radius:9px;padding:8px 14px;cursor:pointer;font-size:13px;font-weight:600;color:var(--slate2)}
+  button.ghost:hover{background:#f8fafc}
+  button.chipq{background:#fff;border:1px solid var(--line2);border-radius:20px;padding:7px 13px;margin:4px 5px 0 0;cursor:pointer;font-size:12.5px;color:var(--slate2)}
+  button.chipq:hover{border-color:var(--brand);color:var(--brand)}
+  .hero{background:linear-gradient(120deg,#0f172a,#1e293b 60%,#334155);color:#fff;border-radius:14px;padding:20px 22px;margin-bottom:18px;box-shadow:var(--shadow-lg)}
+  .hero h2{color:#fff} .hero .meta{color:#cbd5e1;font-size:12.5px;margin-top:4px}
+  .strip{display:flex;gap:34px;align-items:center;flex-wrap:wrap;background:linear-gradient(120deg,#0f172a,#1e293b);color:#fff;border-radius:14px;padding:18px 22px;box-shadow:var(--shadow-lg);margin-bottom:18px}
+  .strip .lbl{color:#94a3b8;font-size:10.5px;text-transform:uppercase;letter-spacing:.09em;font-weight:700}
+  .strip .big{font-size:30px;font-weight:800;letter-spacing:-.02em;font-variant-numeric:tabular-nums;line-height:1.1}
+  .strip .big.brand{color:#7dd3fc}.strip .big.pos{color:#34d399}.strip .big.neg{color:#fca5a5}
+  .stages{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:6px}
+  .stage{background:#f1f5f9;border:1px solid var(--line2);border-radius:9px;padding:8px 13px;font-size:12.5px;font-weight:600;color:var(--slate2)}
+  .stage.end{background:var(--brand-soft);border-color:var(--brand-line);color:var(--brand-d)}
+  .stagesep{color:var(--mut2);font-weight:700}
+  .lever{display:grid;grid-template-columns:1.2fr .7fr 1.1fr;gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line)}
+  .lever:last-child{border-bottom:none} .lever b{font-weight:600;font-size:13px}
+  .lever input{width:104px;padding:6px 9px;border:1px solid var(--line2);border-radius:8px;font-size:13px;font-variant-numeric:tabular-nums;transition:.15s}
+  .lever input:focus{outline:none;border-color:var(--brand);box-shadow:0 0 0 3px rgba(37,99,235,.12)}
+  .lever .ctx{font-size:12px;color:var(--mut)}
+  .mut{color:var(--mut)} .pos{color:var(--emerald);font-weight:600} .neg{color:var(--red);font-weight:600}
+  .grid2{display:grid;grid-template-columns:1.05fr .95fr;gap:18px} @media(max-width:900px){.grid2{grid-template-columns:1fr}}
+  .banner{background:linear-gradient(120deg,#eff6ff,#fff);border:1px solid var(--brand-line);border-radius:12px;padding:12px 16px;margin-bottom:16px;font-size:13px}
+  .gov{display:inline-flex;align-items:center;gap:6px;font-size:11px;color:#7dd3fc;font-weight:700;text-transform:uppercase;letter-spacing:.06em}
+  .gov::before{content:"◆";font-size:9px}
+  .find{display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--line);font-size:13px} .find:last-child{border:none}
+  details{margin:8px 0} summary{cursor:pointer;color:var(--brand);font-size:12px;font-weight:600}
+  details .body{color:var(--mut);font-size:12.5px;margin-top:6px;max-width:74ch}
+  .modal{position:fixed;inset:0;background:rgba(15,23,42,.5);display:none;align-items:center;justify-content:center;z-index:40}
+  .modal .box{background:#fff;border-radius:14px;padding:22px;width:460px;box-shadow:var(--shadow-lg)}
+  .modal label{font-size:12px;font-weight:700;color:var(--slate2);display:block;margin-top:8px}
+  .modal input,.modal textarea{width:100%;padding:9px;border:1px solid var(--line2);border-radius:8px;margin:5px 0;font:inherit}
+  pre{background:#0f172a;color:#cbd5e1;padding:12px;border-radius:10px;overflow:auto;font-size:12px;line-height:1.5}
+  .lin{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:12px}
+  .lin .node{background:#f8fafc;border:1px solid var(--line2);border-radius:8px;padding:6px 11px;font-weight:600} .lin .arr{color:var(--mut2);font-weight:700}
+  .spin{display:inline-block;width:11px;height:11px;border:2px solid rgba(37,99,235,.25);border-top-color:#2563eb;border-radius:50%;animation:sp .7s linear infinite;vertical-align:-1px}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  .tiles{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-bottom:18px} @media(max-width:900px){.tiles{grid-template-columns:repeat(2,1fr)}}
+  .tile{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 18px;box-shadow:var(--shadow)}
+  .tile .k{color:var(--mut);font-size:11px;text-transform:uppercase;letter-spacing:.07em;font-weight:700}
+  .tile .v{font-size:28px;font-weight:800;margin-top:6px;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+  .tile .v.warn{color:var(--amber)} .tile .v.pos{color:var(--emerald)}
+  iframe.embed{width:100%;border:1px solid var(--line);border-radius:12px;background:#fff}
+  .agentcard{display:flex;gap:14px;align-items:flex-start}
+  .agenticon{width:42px;height:42px;border-radius:11px;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;background:linear-gradient(135deg,#2563eb,#60a5fa);color:#fff;box-shadow:0 2px 10px rgba(37,99,235,.35)}
+  .agenticon.rev{background:linear-gradient(135deg,#b45309,#f59e0b)} .agenticon.sum{background:linear-gradient(135deg,#059669,#34d399)}
+  .jflow{display:flex;flex-wrap:wrap;gap:10px;align-items:stretch;margin-top:10px}
+  .jgroup{flex:1;min-width:210px;border:1px solid var(--line2);border-radius:12px;padding:10px 12px;background:#f8fafc}
+  .jgroup .gl{font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--mut2);margin-bottom:8px}
+  .jnodes{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+  .jnode{display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;border:none;background:none;font:inherit;padding:2px}
+  .jnode .num{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;background:#fff;border:2px solid var(--line2);color:var(--slate2);transition:all .15s}
+  .jnode:hover .num{border-color:var(--brand-line)}
+  .jnode.active .num{background:var(--brand);border-color:var(--brand);color:#fff;box-shadow:var(--shadow)}
+  .jnode .lab{font-size:10px;color:var(--mut);max-width:80px;text-align:center;line-height:1.2}
+  .jsep{color:var(--mut2);font-weight:700;align-self:center}
+  .llayer{margin:10px 0}
+  .llayer .lk{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--mut2);display:block;margin-bottom:2px}
+  .lschem{background:#f8fafc;border:1px solid var(--line2);border-radius:10px;padding:8px;display:inline-block}
+  a.assetlink{display:inline-block;background:#fff;border:1px solid var(--line2);border-radius:8px;padding:7px 11px;font-size:12.5px;font-weight:600;color:var(--slate2);text-decoration:none;margin:3px 4px 0 0}
+  a.assetlink:hover{border-color:var(--brand-line);color:var(--brand-d)}
+  .howglyph{font-size:12px;font-weight:600;color:var(--brand);cursor:pointer;text-decoration:none;margin-left:8px;white-space:nowrap}
+  .mdbody{font-size:13.5px;line-height:1.55}
+  .mdbody h2{font-size:18px;margin:16px 0 6px} .mdbody h3{font-size:15px;margin:15px 0 4px} .mdbody h4{font-size:13.5px;margin:11px 0 2px;color:var(--slate2)}
+  .mdbody p{margin:5px 0} .mdbody li{margin:2px 0} .mdbody ul{margin:4px 0 8px 4px;padding-left:18px}
+  .mdbody code{background:#f1f5f9;border-radius:4px;padding:1px 5px;font-size:12px;font-family:ui-monospace,Menlo,monospace} .mdbody a{color:var(--brand)} .mdbody hr{border:none;border-top:1px solid var(--line2);margin:12px 0}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand"><span class="brickmark"><i></i><i></i><i></i><i></i></span>
+      <div><div class="bt">Bricksurance</div><div class="bs">H&amp;B Renewal Workbench</div></div></div>
+    <nav class="nav" id="nav"></nav>
+    <div class="side-foot">Databricks · DEV<br><span class="pill">UNITY CATALOG · SYNTHETIC</span></div>
+  </aside>
+  <main class="main" id="main"></main>
+</div>
+<div class="modal" id="modal"><div class="box">
+  <h2>Save scenario</h2><div class="mut" style="font-size:12.5px;margin-bottom:6px">Retained as a governed decision with full audit and lineage.</div>
+  <label>Scenario name</label><input id="sc_name" placeholder="e.g. Trend held to book">
+  <label>Reason (required)</label><textarea id="sc_reason" rows="3" placeholder="Why this position — for the record and the audit trail"></textarea>
+  <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">
+    <button class="ghost" onclick="closeModal()">Cancel</button><button class="act" onclick="doSave()">Save decision</button></div>
+</div></div>
+
+<script>
+const $=s=>document.querySelector(s); const el=(t,c,h)=>{const e=document.createElement(t);if(c)e.className=c;if(h!=null)e.innerHTML=h;return e;};
+const pct=x=>x==null?"—":(x*100).toFixed(1)+"%"; const usd=x=>x==null?"—":"$"+Math.round(x).toLocaleString();
+const api=(u,o)=>fetch(u,o).then(r=>r.json());
+let STATE={view:"home",doc:null,inputs:null,overrides:{}};
+const NAV=[
+  ["Overview",[["home","Daily view","🏠"],["dashboard","Dashboard","📈"]]],
+  ["Pipeline",[["ingestion","Ingestion","📥"],["book","Book","📖"]]],
+  ["Renewal",[["workspace","Renewal Workspace","🧮"],["benchmarks","Benchmarks","📊"]]],
+  ["Intelligence",[["agents","Agents","🤖"],["ask","Ask the Book","💬"],["audit","Audit","🛡️"]]],
+];
+const RENDER={home:renderHome,dashboard:renderDashboard,ingestion:renderIngestion,book:renderBook,workspace:renderWorkspace,benchmarks:renderBench,learn:renderLearn,agents:renderAgents,ask:renderAsk,audit:renderAudit};
+let LEARN_ANCHOR=null;  // node # to pre-expand when Learn is opened from another panel
+
+function computeBuildup(inp, ov){
+  const i=Object.assign({},inp,ov||{});
+  if(ov&&ov.credibility_experience_weight!=null&&(ov.credibility_manual_weight==null))
+    i.credibility_manual_weight=1-ov.credibility_experience_weight;
+  const incurred=i.total_incurred_claims/i.member_months;
+  const adjusted=incurred*i.demographic_adjustment;
+  const ecc=adjusted-i.less_pooled_claims_pmpm;
+  const eff=Math.pow(1+i.annual_trend,i.months_of_trend/12)-1;
+  const projm=ecc*i.benefit_change*(1+eff)+i.projected_excess_claims_pmpm+i.large_claim_add_back_pmpm;
+  const expprem=projm/i.target_loss_ratio*(1+i.benefit_advisor_fee);
+  const curpmpm=i.current_total_premium_monthly/i.current_members;
+  const expinc=expprem/curpmpm-1;
+  const blended=i.credibility_experience_weight*expinc+i.credibility_manual_weight*i.manual_rating_pool_increase;
+  const quoted=blended+i.adjustment;
+  return {member_months:i.member_months,incurred_pmpm:incurred,demographic_adjustment:i.demographic_adjustment,
+    adjusted_incurred_pmpm:adjusted,less_pooled_claims_pmpm:i.less_pooled_claims_pmpm,experience_claim_cost_pmpm:ecc,
+    benefit_change:i.benefit_change,annual_trend:i.annual_trend,months_of_trend:i.months_of_trend,effective_trend:eff,
+    projected_excess_claims_pmpm:i.projected_excess_claims_pmpm,large_claim_add_back_pmpm:i.large_claim_add_back_pmpm,
+    projected_medical_pmpm:projm,target_loss_ratio:i.target_loss_ratio,benefit_advisor_fee:i.benefit_advisor_fee,
+    experience_based_premium_pmpm:expprem,current_premium_pmpm:curpmpm,experience_based_increase:expinc,
+    manual_rating_pool_increase:i.manual_rating_pool_increase,credibility_experience_weight:i.credibility_experience_weight,
+    credibility_manual_weight:i.credibility_manual_weight,blended_rate_action:blended,adjustment:i.adjustment,quoted_change:quoted,
+    current_members:i.current_members,projected_billed_premium_annual:curpmpm*(1+quoted)*i.current_members*12,
+    current_billed_premium_annual:curpmpm*i.current_members*12};
+}
+
+function renderNav(){const n=$("#nav");n.innerHTML="";NAV.forEach(([sec,items])=>{
+  n.appendChild(el("div","nav-section",sec));
+  items.forEach(([k,label,ic])=>{const a=el("a",STATE.view===k?"active":"",`<span class="ic">${ic}</span><span>${label}</span>`);a.onclick=()=>go(k);n.appendChild(a);});});
+  // Learn pinned to the bottom of the sidebar
+  n.appendChild(el("div","nav-div"));
+  const la=el("a",STATE.view==="learn"?"active":"",`<span class="ic">🧭</span><span>Learn</span>`);la.onclick=()=>go("learn");n.appendChild(la);}
+function go(v){STATE.view=v;renderNav();RENDER[v]();}
+function explainer(txt){const d=el("details");d.appendChild(el("summary",null,"What am I seeing?"));d.appendChild(el("div","body",txt));return d;}
+function dlOriginal(doc){const wrap=el("div");wrap.style.marginTop="12px";
+  if(doc&&doc.stored_path){const b=el("button","act","⬇ Download original submission");
+    b.onclick=()=>{const a=document.createElement("a");a.href="/api/document/"+doc.doc_id+"/file";a.download=doc.file_name||"submission.xlsx";document.body.appendChild(a);a.click();a.remove();};
+    wrap.appendChild(b);
+    const p=el("div","mut","📁 Stored in governed UC Volume: "+doc.stored_path);p.style.cssText="margin-top:6px;font-size:12px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-all";wrap.appendChild(p);}
+  else{wrap.appendChild(el("div","mut","Original not archived (historical import). Files ingested through the pipeline are stored in the governed Volume and pulled straight from here."));}
+  return wrap;}
+
+// ---------------- HOME / DAILY VIEW ----------------
+async function renderHome(){const m=$("#main");m.innerHTML="";const d=await api("/api/overview");
+  const head=el("div","hero");
+  const attn=(d.counts.quarantined||0)+(d.counts.differs||0);
+  head.innerHTML=`<div class="eyebrow" style="color:#7dd3fc">Daily view</div>
+    <h2>Renewal desk — today</h2>
+    <div class="meta">${d.book_total} renewals in the book · ${d.counts.active||0} active · ${attn} awaiting a human · governed on Unity Catalog</div>`;
+  m.appendChild(head);
+  const tools=el("div");tools.style.cssText="display:flex;justify-content:flex-end;align-items:center;gap:10px;margin:-6px 0 10px";
+  const rbtn=el("button","ghost","↺ Reset demo");rbtn.title="Reseed to the pristine demo state (~1–2 min)";rbtn.onclick=()=>resetDemo(rbtn);
+  const rstat=el("span","mut");rstat.id="resetstatus";rstat.style.fontSize="12.5px";
+  tools.append(rstat,rbtn);m.appendChild(tools);
+  const k=d.kpi||{};
+  const tiles=el("div","tiles");
+  tiles.innerHTML=`
+    <div class="tile"><div class="k">In the book</div><div class="v">${d.book_total}</div></div>
+    <div class="tile"><div class="k">Active</div><div class="v">${d.counts.active||0}</div></div>
+    <div class="tile"><div class="k">Needs attention</div><div class="v ${attn?'warn':''}">${attn}</div></div>
+    <div class="tile"><div class="k">Avg carrier action</div><div class="v">${pct(k.avg_carrier)}</div></div>
+    <div class="tile"><div class="k">Value negotiated</div><div class="v pos">${usd(k.value_negotiated)}</div></div>`;
+  m.appendChild(tiles);
+
+  if(d.hero){const c=el("div","card");c.appendChild(el("div","eyebrow","Open renewal"));
+    c.innerHTML+=`<div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">
+      <div><b style="font-size:15px">${d.hero.employer_group}</b> <span class=mut>— ${d.hero.carrier} · ${d.hero.policy_period}</span><div class=mut style="font-size:12.5px">Freshly ingested and governed — ready to negotiate.</div></div></div>`;
+    const b=el("button","act","Open workspace →");b.style.marginTop="12px";b.onclick=()=>openDoc(d.hero.doc_id);c.appendChild(b);m.appendChild(c);}
+
+  const cols=el("div","grid2");
+  const at=el("div","card");at.appendChild(el("div","eyebrow","Needs your attention"));
+  if(d.attention&&d.attention.length){const t=el("table");t.innerHTML="<thead><tr><th>Carrier / group</th><th>Status</th><th class=num>Extract</th></tr></thead>";const tb=el("tbody");
+    d.attention.forEach(a=>{const tr=el("tr","row");tr.innerHTML=`<td>${a.carrier}<div class=mut style="font-size:12px">${a.employer_group} · ${a.policy_period}</div></td><td><span class="chip ${a.status}">${a.status}</span></td><td class=num>${a.fields_found}/${a.fields_expected}</td>`;
+      tr.onclick=()=>{if(a.status==='quarantined')openQuarantine(a.doc_id);else openDoc(a.doc_id);};tb.appendChild(tr);});
+    t.appendChild(tb);at.appendChild(t);}
+  else at.appendChild(el("div","mut","Nothing in quarantine — the book is clean."));
+  cols.appendChild(at);
+  const ra=el("div","card");ra.appendChild(el("div","eyebrow","Recent activity"));
+  const rt=el("table");rt.innerHTML="<thead><tr><th>When</th><th>Event</th><th>Detail</th></tr></thead>";const rb=el("tbody");
+  (d.recent||[]).forEach(r=>rb.appendChild(el("tr",null,`<td class=mut style="white-space:nowrap">${(r.created_at||'').slice(0,16)}</td><td><span class="chip plain">${r.event_type}</span></td><td class=mut>${(r.detail||'').slice(0,60)}</td>`)));
+  rt.appendChild(rb);ra.appendChild(rt);cols.appendChild(ra);
+  m.appendChild(cols);
+}
+async function resetDemo(btn){
+  if(!confirm("Reset the demo to the pristine seeded state?\nThis reseeds the schema on a serverless Job (~1–2 min).")) return;
+  const s=$("#resetstatus");btn.disabled=true;s.innerHTML='<span class="spin"></span> starting…';
+  let r;try{r=await api("/api/reset",{method:"POST"});}catch(e){r={error:String(e)};}
+  if(!r||!r.run_id){s.textContent="Reset failed: "+((r&&(r.detail||r.error))||"no run id");btn.disabled=false;return;}
+  const t0=Date.now();
+  const poll=async()=>{
+    let st;try{st=await api("/api/reset/status?run_id="+r.run_id);}catch(e){st={};}
+    const secs=Math.round((Date.now()-t0)/1000);
+    if(st.done){
+      if(st.success){s.innerHTML="✓ reset in "+secs+"s — refreshing…";setTimeout(()=>go("home"),1200);}
+      else{s.textContent="reset "+(st.result_state||"failed")+" ("+secs+"s)";btn.disabled=false;}
+      return;
+    }
+    s.innerHTML='<span class="spin"></span> reseeding… '+secs+'s';
+    setTimeout(poll,5000);
+  };
+  setTimeout(poll,5000);
+}
+
+// ---------------- DASHBOARD (embedded AI/BI) ----------------
+async function renderDashboard(){const m=$("#main");m.innerHTML="";const c=el("div","card");
+  c.appendChild(el("div","eyebrow","Analytics"));c.appendChild(el("h2",null,"Renewal book — AI/BI dashboard"));
+  c.appendChild(explainer("A Databricks AI/BI (Lakeview) dashboard over the same governed views, embedded here. Carrier-proposed actions, your book trend benchmark, value negotiated, and claims experience — one governed source, many surfaces."));
+  const cfg=await api("/api/config");
+  if(cfg.dashboard_url){const f=el("iframe","embed");f.src=cfg.dashboard_url;f.style.height="820px";f.setAttribute("frameborder","0");c.appendChild(f);}
+  else c.appendChild(el("div","banner","Dashboard not configured — set HB_DASHBOARD_ID (see data/create_dashboard.py)."));
+  m.appendChild(c);
+  // follow-ups: the dashboard has its own Ask-Genie button; these jump to the in-app Ask the book
+  const q=el("div","card");q.appendChild(el("div","eyebrow","Ask the book about this"));
+  q.appendChild(el("div","mut","This dashboard has its own <b>Ask Genie</b> button (top-right of the dashboard), wired to the same governed book. Example follow-ups — click to ask here:"));
+  const ex=el("div");ex.style.marginTop="8px";
+  ["Which carrier has the biggest gap between their ask and our negotiated position?",
+   "How much have we saved negotiating this year, by carrier?",
+   "Show book trend by carrier for groups over 500 lives",
+   "Which months drove claims for Harborview Logistics, and by how much?"].forEach(t=>{const b=el("button","chipq",t);b.onclick=()=>askFromDashboard(t);ex.appendChild(b);});
+  q.appendChild(ex);m.appendChild(q);
+}
+
+// ---------------- AGENTS ----------------
+async function renderAgents(){const m=$("#main");m.innerHTML="";const d=await api("/api/agents");
+  const head=el("div","card");head.appendChild(el("div","eyebrow","Mosaic AI"));head.appendChild(el("h2",null,"Agents"));
+  head.appendChild(explainer("Three agents work the renewal book. The Reviewer challenges each carrier exhibit against your book and method; the Deal Summariser drafts a broker-facing summary of a saved position; Genie answers natural-language questions over the governed views. All run on Databricks — Claude via the Foundation Model API and the Genie agent."));
+  m.appendChild(head);
+
+  // Reviewer agent
+  const rv=el("div","card");const rvh=el("div","agentcard");
+  rvh.innerHTML=`<div class="agenticon rev">🔎</div><div style="flex:1"><b style="font-size:15px">Reviewer agent</b>
+    <span class="chip plain" style="margin-left:6px">${d.reviewer.generated_by}</span>
+    <div class=mut style="font-size:12.5px;margin-top:2px">Compares each renewal's assumptions against the book-trend benchmark and the method, and flags challenge candidates — with at least one green "leave as is" so it reads as a reviewer, not an attack dog. Live path via Claude on the Foundation Model API (flag <code>LIVE_REVIEWER=${d.reviewer.live_flag}</code>).</div></div>`;
+  rv.appendChild(rvh);
+  const rtgt=d.reviewer.target&&(d.reviewer.target.source_document_id||d.reviewer.target.doc_id);
+  if(d.reviewer.target){rv.appendChild(el("div","mut",`<div style="margin:12px 0 6px">Latest run — <b>${d.reviewer.target.employer_group}</b> · ${d.reviewer.target.carrier}:</div>`));
+    d.reviewer.findings.forEach(f=>rv.appendChild(el("div","find",`<span class="flag ${f.severity}">${f.severity}</span><span>${f.narrative}</span>`)));
+    if(rtgt){const b=el("button","act","Open the flagged renewal →");b.style.marginTop="12px";b.onclick=()=>openDoc(rtgt);rv.appendChild(b);}}
+  m.appendChild(rv);
+
+  // Summariser — draft inline
+  const sm=el("div","card");const smh=el("div","agentcard");
+  smh.innerHTML=`<div class="agenticon sum">✎</div><div style="flex:1"><b style="font-size:15px">Deal summariser</b>
+    <span class="chip plain" style="margin-left:6px">${d.summariser.endpoint}</span>
+    <div class=mut style="font-size:12.5px;margin-top:2px">Drafts a concise, broker-voiced executive summary of a renewal position — top levers, target range, why. Editable before it goes to the client. Also runs in the Renewal Workspace (✎ Draft exec summary).</div></div>`;
+  sm.appendChild(smh);
+  const sbtn=el("button","act","✎ Draft a summary now");sbtn.style.marginTop="12px";
+  const sout=el("div");sout.style.marginTop="10px";
+  sbtn.onclick=async()=>{if(!rtgt){sout.innerHTML='<div class="mut">No renewal to summarise.</div>';return;}
+    sbtn.disabled=true;sout.innerHTML='<div class="mut"><span class="spin"></span> Drafting via Foundation Model API…</div>';
+    const r=await api("/api/summary",{method:"POST",headers:{'Content-Type':'application/json'},body:JSON.stringify({doc_id:rtgt,overrides:{annual_trend:0.07}})}).catch(e=>({summary:"(error: "+e+")"}));
+    sbtn.disabled=false;const ta=el("textarea");ta.style.cssText="width:100%;min-height:170px;border:1px solid var(--line2);border-radius:8px;padding:10px;font:inherit";ta.value=r.summary||"";sout.innerHTML="";sout.appendChild(ta);};
+  sm.appendChild(sbtn);sm.appendChild(sout);m.appendChild(sm);
+
+  // Genie — ask inline (right here) or open the full panel
+  const gn=el("div","card");const gnh=el("div","agentcard");
+  gnh.innerHTML=`<div class="agenticon">💬</div><div style="flex:1"><b style="font-size:15px">Ask the book — Genie</b>
+    <span class="chip ${d.genie.configured?'active':'plain'}" style="margin-left:6px">${d.genie.configured?'configured':'not configured'}</span>
+    <div class=mut style="font-size:12.5px;margin-top:2px">A Databricks Genie agent over the governed views and metric views — natural-language questions, with the generated SQL shown for verification.</div></div>`;
+  gn.appendChild(gnh);
+  const gbox=el("div");gbox.style.cssText="display:flex;gap:8px;margin-top:12px";
+  const gin=el("input");gin.placeholder="Ask the book… e.g. Which carrier runs richest versus our book trend?";gin.style.cssText="flex:1;padding:10px 12px;border:1px solid var(--line2);border-radius:9px;font:inherit";
+  const gask=el("button","act","Ask");const gout=el("div");gout.style.marginTop="10px";
+  const runG=()=>genieQuery(gin.value.trim(),gout);
+  gin.onkeydown=e=>{if(e.key==="Enter")runG();};gask.onclick=runG;
+  gbox.append(gin,gask);gn.appendChild(gbox);gn.appendChild(gout);
+  const gb=el("button","ghost","Open full Ask the Book (with native Genie) →");gb.style.marginTop="10px";gb.onclick=()=>go("ask");gn.appendChild(gb);
+  m.appendChild(gn);
+}
+
+// ---------------- INGESTION ----------------
+async function renderIngestion(){const m=$("#main");m.innerHTML="";const d=await api("/api/ingestion");const cfg=await api("/api/config").catch(()=>({}));const L=(cfg&&cfg.links)||{};
+  const c=el("div","card");c.appendChild(el("div","eyebrow","Pipeline"));c.appendChild(el("h2",null,"Carrier file ingestion"));
+  c.appendChild(explainer("Carriers send renewals as Excel/PDF with no APIs and a different layout each. A file dropped into the Unity Catalog Volume inbox is fingerprinted against the carrier template, extracted by two independent paths (deterministic label-match + Claude), reconciled field-by-field, then either quarantined for a human or appended to governed Delta with full provenance. This runs as a Databricks Job on file-arrival; the button below runs it now."));
+  const STAGES=[
+    ["① File lands in Volume",L.volume,"UC Volume landing/inbox — file-arrival Job hb_ingest (jobs/run_ingest_job.py)"],
+    ["② Fingerprint vs template",L.carrier_template,"0_carrier_template — identify()"],
+    ["③ Two-path extract",L.llm_endpoint,"deterministic label-match + Claude via FMAPI — extract_deterministic() / extract_ai()"],
+    ["④ Reconcile field-by-field",L.source_document,"reconcile() → 1_source_document.reconciliation_detail"],
+    ["⑤ Quarantine · or · append to Delta",L.source_document,"process_file() → 1_source_document + source tables"],
+  ];
+  const st=el("div","stages");
+  STAGES.forEach(([label,url,cap],i)=>{const cls="stage"+(i===STAGES.length-1?" end":"");
+    let n;if(url){n=el("a",cls,label+" ↗");n.href=url;n.target="_blank";n.title=cap+" — open in workspace";n.style.textDecoration="none";}
+    else{n=el("span",cls,label);n.title=cap;}
+    st.appendChild(n);if(i<STAGES.length-1)st.appendChild(el("span","stagesep","→"));});
+  c.appendChild(st);
+  c.appendChild(el("div","mut","Each step links to the real Unity Catalog asset in your workspace — click through to show what's happening behind the scenes."));
+  m.appendChild(c);
+
+  // behind the scenes — the real governed assets, click to open in the workspace
+  const bt=el("div","card");bt.appendChild(el("div","eyebrow","Behind the scenes — real assets"));
+  bt.appendChild(el("div","mut","The governed Databricks objects this workbench sits on. Open any in the workspace UI."));
+  const grid=el("div");grid.style.cssText="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px";
+  [["📁 Volume landing/",L.volume],["⚙ Ingestion Job (file-arrival)",L.ingest_job],["🗂 0_carrier_template",L.carrier_template],
+   ["📄 1_source_document",L.source_document],["📈 1_incurred_claims",L.incurred_claims],["📊 2_renewal_inputs",L.renewal_inputs],
+   ["🧮 fn_renewal_buildup",L.fn_buildup],["🤖 Claude endpoint (FMAPI)",L.llm_endpoint],["💾 5_scenario",L.scenario],
+   ["🛡 5_gov_audit_event",L.audit],["📊 6_book_trend_benchmark",L.benchmark],["💬 Genie space",L.genie],
+   ["📈 AI/BI dashboard",L.dashboard],["↺ Reset Job (reseed)",L.reseed_job]].forEach(([label,url])=>{
+    if(!url)return;const a=el("a",null,label+" ↗");a.href=url;a.target="_blank";a.title="Open in workspace";
+    a.style.cssText="display:inline-block;background:#fff;border:1px solid var(--line2);border-radius:8px;padding:7px 11px;font-size:12.5px;font-weight:600;color:var(--slate2);text-decoration:none";grid.appendChild(a);});
+  bt.appendChild(grid);m.appendChild(bt);
+
+  // upload / drop a file — runs the pipeline live and shows what came out
+  const lz=el("div","card");lz.appendChild(el("div","eyebrow","Drop a carrier file"));
+  lz.appendChild(el("div","mut",`Drop a carrier exhibit (.xlsx) and watch the pipeline run: two-path extraction, reconciliation, then quarantine or governed landing. Lands in <code>${d.volume}/</code>. (A file-arrival Job runs the same pipeline in production.)`));
+  const dnote=el("div","mut");dnote.style.marginTop="6px";
+  dnote.innerHTML=`<b>Running the demo?</b> The synthetic demo files are staged in the governed Volume — <code>${d.volume}/demo_files/</code>. <b>Pull them to your computer first</b> (Catalog Explorer ▸ the file ▸ Download, or <code>databricks fs cp</code>), then drag one into ↥ Upload above. Generated by <code>data/make_carrier_file.py</code>: <b>…2026H2.xlsx</b> (clean → active) · <b>…brokenlayout.xlsx</b> (quarantine) · <b>…_v2.xlsx</b> (supersession) · <b>…_month13.xlsx</b> (reforecast).`;
+  lz.appendChild(dnote);
+  if(L.volume){const a=el("a","assetlink","⬇ Open demo files in Catalog Explorer ↗");a.href=L.volume;a.target="_blank";a.rel="noopener";a.style.marginTop="8px";lz.appendChild(a);}
+  const bar=el("div");bar.style.cssText="display:flex;gap:8px;align-items:center;margin:12px 0 4px;flex-wrap:wrap";
+  const fi=el("input");fi.type="file";fi.accept=".xlsx";fi.style.cssText="font-size:13px";
+  const up=el("button","act","↥ Upload & ingest");
+  const sc=el("button","ghost","⟳ Scan inbox");
+  bar.append(fi,up,sc);lz.appendChild(bar);
+  const res=el("div");res.id="ingres";res.style.marginTop="12px";lz.appendChild(res);
+  up.onclick=async()=>{if(!fi.files[0]){alert("Choose a .xlsx carrier file first.");return;}
+    up.innerHTML='<span class="spin" style="border-top-color:#fff"></span> Extracting (two paths)…';
+    const fd=new FormData();fd.append("file",fi.files[0]);
+    const r=await fetch("/api/ingest/upload",{method:"POST",body:fd}).then(x=>x.json()).catch(e=>({error:String(e)}));
+    up.textContent="↥ Upload & ingest";showIngestResult(r);renderRecent();};
+  sc.onclick=async()=>{sc.innerHTML='<span class="spin"></span> Scanning…';const r=await api("/api/ingest/scan",{method:"POST",headers:{'Content-Type':'application/json'},body:"{}"});sc.textContent="⟳ Scan inbox";showIngestResult((r.processed||[])[0]||{status:'none'});renderRecent();};
+  m.appendChild(lz);
+
+  const tc=el("div","card");tc.appendChild(el("div","eyebrow","Carrier template registry"));
+  tc.appendChild(el("div","mut","A new carrier layout is a row here — a binding, not new code."));
+  const tt=el("table");tt.style.marginTop="10px";tt.innerHTML="<thead><tr><th>Carrier</th><th>Document family</th><th class=num>Fields</th><th>Status</th></tr></thead>";
+  const tb=el("tbody");(d.templates||[]).forEach(t=>tb.appendChild(el("tr",null,`<td>${t.carrier}</td><td class=mut>${t.doc_family}</td><td class=num>${t.field_count}</td><td><span class="chip active">${t.status}</span></td>`)));
+  tt.appendChild(tb);tc.appendChild(tt);m.appendChild(tc);
+
+  const rc=el("div","card");rc.appendChild(el("div","eyebrow","Recent ingestions"));
+  rc.appendChild(el("div","mut","What the pipeline decided about each file. Click any row to see what was extracted, the two-path reconciliation, and its lineage."));
+  const rw=el("div");rw.id="recentwrap";rw.style.marginTop="10px";rc.appendChild(rw);m.appendChild(rc);
+  renderRecent();
+}
+async function renderRecent(){const w=$("#recentwrap");if(!w)return;const d=await api("/api/ingestion");
+  const rt=el("table");rt.innerHTML="<thead><tr><th>File</th><th>Carrier</th><th>Group</th><th>Status</th><th class=num>Reconciled</th></tr></thead>";
+  const rb=el("tbody");
+  (d.recent||[]).forEach(r=>{const tr=el("tr","row");
+    tr.innerHTML=`<td>${r.file_name||''}</td><td>${r.carrier}</td><td class=mut>${r.employer_group}</td>
+      <td><span class="chip ${r.status}">${r.status}</span></td><td class=num>${r.fields_found}/${r.fields_expected}</td>`;
+    tr.onclick=()=>openIngestDetail(r.doc_id);rb.appendChild(tr);});
+  rt.appendChild(rb);w.innerHTML="";w.appendChild(rt);
+}
+function reconTable(recon){const t=el("table");t.style.marginTop="8px";
+  t.innerHTML="<thead><tr><th>Field</th><th class=num>Deterministic path</th><th class=num>Claude path</th><th>Reconciliation</th></tr></thead>";
+  const tb=el("tbody");const fmtv=v=>v==null?'<span class=mut>—</span>':(Math.abs(v)<2&&v%1!==0?(+v).toFixed(4):(+v).toLocaleString());
+  (recon||[]).forEach(r=>{const ok=r.status==='agree';tb.appendChild(el("tr",null,
+    `<td>${r.field}</td><td class=num>${fmtv(r.det)}</td><td class=num>${fmtv(r.ai)}</td>
+     <td><span class="flag ${ok?'ok':(r.status==='missing'?'high':'medium')}">${r.status}</span></td>`));});
+  t.appendChild(tb);return t;}
+function showIngestResult(r){const box=$("#ingres");if(!box)return;box.innerHTML="";if(!r||r.status==='none'){box.innerHTML="<div class=mut>Inbox was empty.</div>";return;}
+  if(r.error){box.innerHTML=`<div class=banner>Ingestion error: ${r.error}</div>`;return;}
+  const ok=r.status==='active';
+  const head=el("div");head.innerHTML=`<span class="chip ${r.status}">${r.status}</span> &nbsp;<b>${r.found}/${r.expected}</b> fields recovered — `+
+    (ok?`both paths agree, appended to governed Delta.`:r.status==='quarantined'?`file quarantined — a human confirms before pricing.`:`two paths disagree — pending human confirm.`);
+  box.appendChild(head);
+  if(r.recon)box.appendChild(reconTable(r.recon));
+  if(ok&&r.doc_id){const b=el("button","ghost","Open governed renewal →");b.style.marginTop="10px";b.onclick=()=>openDoc(r.doc_id);box.appendChild(b);}
+}
+async function openIngestDetail(id){const d=await api("/api/document/"+id);const m=$("#main");m.innerHTML="";const doc=d.document;
+  const c=el("div","card");c.appendChild(el("div","eyebrow","Ingestion · "+doc.status));
+  c.appendChild(el("h2",null,doc.file_name));
+  c.appendChild(el("div","mut",`${doc.carrier} · ${doc.employer_group} · ${doc.policy_period} · ingested ${(doc.ingested_at||'').slice(0,16)} · <b>${doc.fields_found}/${doc.fields_expected}</b> fields`));
+  let det={};try{det=JSON.parse(doc.reconciliation_detail||"{}");}catch(e){}
+  if(det.reconciliation){c.appendChild(el("h3",null,"What was extracted — two-path reconciliation"));
+    c.appendChild(el("div","mut","Deterministic label-match vs Claude reading the sheet, reconciled field-by-field. A human confirms before anything is priced."));
+    c.appendChild(reconTable(det.reconciliation));}
+  else{c.appendChild(el("div","banner",doc.status==='quarantined'?"The pipeline <b>refused this file rather than guessing</b> — a human confirms before pricing.":"Two extraction paths disagree — pending human confirm."));
+    c.appendChild(el("h3",null,"Field-level diff"));c.appendChild(el("pre",null,JSON.stringify(det,null,2)));}
+  // the original file, pulled straight from the governed Volume
+  c.appendChild(el("h3",null,"Original submission"));
+  c.appendChild(dlOriginal(doc));
+  // lineage + governance for THIS file
+  const lin=el("div");lin.id="idlin";c.appendChild(lin);
+  const btns=el("div");btns.style.marginTop="14px";
+  if(doc.status==='active'){const bo=el("button","act","Open renewal workspace →");bo.onclick=()=>openDoc(id);btns.appendChild(bo);}
+  const bl=el("button","ghost","🔗 Show lineage & governance");bl.style.marginLeft=doc.status==='active'?"8px":"0";
+  bl.onclick=async()=>{const r=await api("/api/lineage/"+id);const sd=r.source_document||{};const w=$("#idlin");w.innerHTML="<h3>Lineage & governance</h3>";
+    const chain=el("div","lin");const nodes=["governed tables","fn_renewal_buildup"+(r.function.governed?" ✓ governed":""),"2_renewal_inputs v"+r.table_versions['2_renewal_inputs'],"1_source_document","file: "+sd.file_name];
+    nodes.forEach((n,i)=>{chain.appendChild(el("span","node",n));if(i<nodes.length-1)chain.appendChild(el("span","arr","←"));});
+    w.appendChild(chain);w.appendChild(el("div","body","Managed Delta with version history + owner in Unity Catalog; every number traces to the governed method version and the source file it came from."));};
+  btns.appendChild(bl);const bk=el("button","ghost","← Back");bk.style.marginLeft="8px";bk.onclick=()=>go("ingestion");btns.appendChild(bk);
+  c.appendChild(btns);m.appendChild(c);
+}
+
+// ---------------- BOOK ----------------
+async function renderBook(){
+  const m=$("#main");m.innerHTML="";const c=el("div","card");
+  c.appendChild(el("div","eyebrow","The book"));c.appendChild(el("h2",null,"Every renewal, governed"));
+  c.appendChild(explainer("Each row is a carrier renewal that has been through the pipeline. Status shows whether it was accepted (active), held back by the assurance check (quarantined), pending a human confirm (differs), or replaced by a newer file (superseded). Click an active renewal to open its workspace. All data is synthetic."));
+  c.appendChild(howGlyph(2));
+  const docs=await api("/api/book");
+  // controls: search + status filter
+  const bar=el("div");bar.style.cssText="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:12px 0 6px";
+  const search=el("input");search.placeholder="Search carrier or employer group…";
+  search.style.cssText="flex:1;min-width:220px;padding:8px 12px;border:1px solid var(--line2);border-radius:9px;font:inherit";
+  bar.appendChild(search);
+  let curStatus="all";const btns={};
+  const counts=docs.reduce((a,d)=>{a[d.status]=(a[d.status]||0)+1;return a;},{});
+  ["all","active","differs","quarantined","superseded"].forEach(s=>{
+    const n=s==="all"?docs.length:(counts[s]||0);
+    const b=el("button","chipq",`${s}${s!=="all"?` · ${n}`:""}`);if(s==="all")b.style.borderColor="var(--brand)";
+    btns[s]=b;b.onclick=()=>{curStatus=s;Object.values(btns).forEach(x=>{x.style.borderColor="";x.style.color="";});b.style.borderColor="var(--brand)";b.style.color="var(--brand)";draw();};
+    bar.appendChild(b);});
+  c.appendChild(bar);
+  const t=el("table");t.innerHTML="<thead><tr><th>Carrier</th><th>Employer group</th><th>Period</th><th>Status</th><th class=num>Carrier action</th><th class=num>Latest negotiated</th><th class=num>Extract</th></tr></thead>";
+  const tb=el("tbody");t.appendChild(tb);c.appendChild(t);
+  const cnt=el("div","mut");cnt.style.cssText="font-size:12px;margin-top:10px";c.appendChild(cnt);
+  function draw(){const q=search.value.trim().toLowerCase();
+    const rows=docs.filter(d=>(curStatus==="all"||d.status===curStatus)&&(!q||(d.carrier+" "+d.employer_group).toLowerCase().includes(q)));
+    tb.innerHTML="";
+    rows.forEach(d=>{const clk=d.status==='active'||d.status==='differs';const tr=el("tr",clk||d.status==='quarantined'?"row":"");
+      tr.innerHTML=`<td>${d.carrier}</td><td>${d.employer_group}</td><td class=mut>${d.policy_period}</td>
+        <td><span class="chip ${d.status}">${d.status}</span></td><td class=num>${pct(d.carrier_action)}</td>
+        <td class=num>${d.n_scenarios?pct(d.latest_scenario_action):'<span class=mut>none</span>'}</td><td class=num>${d.fields_found}/${d.fields_expected}</td>`;
+      if(clk)tr.onclick=()=>openDoc(d.doc_id);else if(d.status==='quarantined')tr.onclick=()=>openQuarantine(d.doc_id);
+      tb.appendChild(tr);});
+    cnt.textContent=`${rows.length} of ${docs.length} renewals`;}
+  search.oninput=draw;draw();m.appendChild(c);
+}
+async function openQuarantine(id){const d=await api("/api/document/"+id);const m=$("#main");m.innerHTML="";
+  const c=el("div","card");c.appendChild(el("div","eyebrow","Assurance · quarantine"));
+  c.appendChild(el("h2",null,"Quarantined file — "+d.document.file_name));
+  c.appendChild(el("div","banner","The pipeline <b>refused this file rather than guessing</b>. Extraction recovered "+d.document.fields_found+"/"+d.document.fields_expected+" fields; a human confirms before anything is priced."));
+  c.appendChild(el("h3",null,"Field-level diff"));c.appendChild(el("pre",null,JSON.stringify(JSON.parse(d.document.reconciliation_detail||"{}"),null,2)));
+  const back=el("button","ghost","← Back");back.onclick=()=>go(STATE.view==='ingestion'?'ingestion':'book');c.appendChild(back);m.appendChild(c);}
+async function openDoc(id){const m=$("#main");
+  m.innerHTML='<div class="card"><div class="mut" style="padding:6px 0"><span class="spin"></span> Opening renewal workspace — reproducing the build-up via the governed function…</div></div>';
+  try{const d=await api("/api/document/"+id);STATE.doc=d;STATE.inputs=d.inputs;STATE.overrides={};go("workspace");}
+  catch(e){m.innerHTML='<div class="card"><div class="banner">Couldn\'t open this renewal: '+e+'</div></div>';}}
+
+// ---------------- WORKSPACE ----------------
+const LEVERS=[["annual_trend","Annual trend","pct"],["months_of_trend","Months of trend","num"],
+  ["demographic_adjustment","Demographic adj","f"],["less_pooled_claims_pmpm","Pooled claims credit","usd"],
+  ["benefit_change","Benefit change","f"],["target_loss_ratio","Target loss ratio","pct"],
+  ["credibility_experience_weight","Credibility (experience)","f"],["adjustment","Broker adjustment","pct"]];
+const LINES=[["member_months","Member months","n"],["incurred_pmpm","Incurred claims PMPM","$"],
+  ["demographic_adjustment","Demographic adjustment","f"],["adjusted_incurred_pmpm","Adjusted incurred PMPM","$"],
+  ["less_pooled_claims_pmpm","Less pooled claims","$"],["experience_claim_cost_pmpm","Experience claim cost","$"],
+  ["benefit_change","Benefit change","f"],["effective_trend","Effective trend","%"],
+  ["projected_medical_pmpm","Projected medical PMPM","$"],["experience_based_premium_pmpm","Experience-based premium","$"],
+  ["current_premium_pmpm","Current premium PMPM","$"],["experience_based_increase","Experience-based increase","%"],
+  ["manual_rating_pool_increase","Manual pool increase (carrier)","%"],["blended_rate_action","Blended renewal action","%"],
+  ["quoted_change","Quoted change in billed","%"]];
+function fmt(v,k){if(v==null)return"—";if(k==="%"||k==="pct")return(v*100).toFixed(2)+"%";if(k==="$"||k==="usd")return"$"+v.toFixed(2);if(k==="f")return v.toFixed(4);if(k==="n")return Math.round(v).toLocaleString();return v;}
+
+async function renderWorkspace(){const m=$("#main");m.innerHTML="";if(!STATE.doc){m.appendChild(el("div","card","<div class=mut>Open a renewal from the Book tab.</div>"));return;}
+  const d=STATE.doc,doc=d.document;
+  const head=el("div","hero");
+  head.innerHTML=`<div class="eyebrow" style="color:#7dd3fc">Renewal workspace</div>
+    <h2>${doc.employer_group} <span style="color:#94a3b8;font-weight:600">— ${doc.carrier}</span> <span class="chip ${doc.status}" style="vertical-align:middle">${doc.status}</span></h2>
+    <div class="meta">Policy period ${doc.policy_period} · file ${doc.file_name} · extracted ${doc.fields_found}/${doc.fields_expected} fields · <span class="gov">governed function</span></div>`;
+  m.appendChild(head);
+  const exp=el("div","card");exp.style.padding="14px 20px";exp.appendChild(explainer("The build-up on the left is the carrier's renewal exhibit, reproduced line by line by a governed Unity Catalog function — not math in this app. Move a lever on the right to negotiate; the preview updates instantly, and the governed function records the number when you save. Save the position as a decision with a reason and it is retained with full audit and lineage."));exp.appendChild(howGlyph(3));
+  m.appendChild(exp);
+  if(d.reforecast_months>12){const b=el("div","banner");b.innerHTML="📈 <b>Fresh data available</b> — "+d.reforecast_months+" claims months loaded (a new month arrived). The projected action can be recomputed on the fresher experience.";m.appendChild(b);}
+  const g=el("div","grid2");
+  const ex=el("div","card");ex.appendChild(el("div","eyebrow","Carrier build-up"));const t=el("table");t.id="exhibit";ex.appendChild(t);g.appendChild(ex);
+  const lv=el("div","card");lv.appendChild(el("div","eyebrow","Negotiation levers"));
+  lv.appendChild(el("div","mut","Carrier value · your book · reviewer flag. Manual pool increase is locked (carrier-provided)."));
+  LEVERS.forEach(([k,label,kind])=>{const r=el("div","lever");const iv=STATE.inputs[k];
+    const finding=(d.findings||[]).find(f=>f.lever===k);
+    r.appendChild(el("div",null,`<b>${label}</b>`));
+    const inp=el("input");inp.type="number";inp.step=kind==="pct"?"0.005":kind==="f"?"0.001":"1";inp.value=iv;
+    inp.oninput=()=>{const v=parseFloat(inp.value);if(!isNaN(v))STATE.overrides[k]=v;recompute();};
+    const w=el("div");w.appendChild(inp);r.appendChild(w);
+    const ctx=el("div","ctx");let bh=k==="annual_trend"&&d.book_trend!=null?`book <b>${pct(d.book_trend)}</b>`:"carrier "+fmt(iv,kind);
+    ctx.innerHTML=bh+(finding?` <span class="flag ${finding.severity}">${finding.severity}</span>`:"");
+    r.appendChild(ctx);lv.appendChild(r);});
+  g.appendChild(lv);m.appendChild(g);
+  const strip=el("div","strip");strip.id="strip";m.appendChild(strip);
+  if(d.findings&&d.findings.length){const fc=el("div","card");fc.appendChild(el("div","eyebrow","Reviewer findings"));
+    d.findings.forEach(f=>{fc.appendChild(el("div","find",`<span class="flag ${f.severity}">${f.severity}</span><span>${f.narrative}</span>`));});m.appendChild(fc);}
+  const cmp=el("div","card");cmp.id="compare";m.appendChild(cmp);
+  const actions=el("div","card");actions.style.display="flex";actions.style.gap="8px";
+  const bSave=el("button","act","💾 Save scenario");bSave.onclick=openModal;
+  const bSum=el("button","ghost","✎ Draft exec summary");bSum.onclick=doSummary;
+  const bLin=el("button","ghost","🔗 Lineage");bLin.onclick=doLineage;
+  actions.append(bSave,bSum,bLin);m.appendChild(actions);
+  const sb=el("div","card");sb.id="extra";sb.style.display="none";m.appendChild(sb);
+  recompute();await renderCompare();
+}
+function recompute(){const b=STATE.doc.baseline||computeBuildup(STATE.inputs);const s=computeBuildup(STATE.inputs,STATE.overrides);
+  const t=$("#exhibit");t.innerHTML="<thead><tr><th>Line</th><th class=num>Carrier</th><th class=num>Scenario</th></tr></thead>";const tb=el("tbody");
+  LINES.forEach(([k,label,kind])=>{const chg=Math.abs((b[k]||0)-(s[k]||0))>1e-9;
+    tb.appendChild(el("tr",null,`<td>${label}${k==='manual_rating_pool_increase'?' 🔒':''}</td><td class=num>${fmt(b[k],kind)}</td><td class="num" style="${chg?'color:var(--brand);font-weight:700':''}">${fmt(s[k],kind)}</td>`));});
+  t.appendChild(tb);
+  const vas=b.projected_billed_premium_annual-s.projected_billed_premium_annual;
+  $("#strip").innerHTML=`<div><div class=lbl>Carrier quoted</div><div class=big>${pct(b.quoted_change)}</div></div>
+    <div><div class=lbl>Your position</div><div class="big brand">${pct(s.quoted_change)}</div></div>
+    <div><div class=lbl>Value at stake / yr</div><div class="big ${vas>=0?'pos':'neg'}">${usd(vas)}</div></div>
+    <div class=gov style="margin-left:auto">governed by fn_renewal_buildup</div>`;
+}
+async function renderCompare(){const d=await api("/api/document/"+STATE.doc.document.doc_id);const c=$("#compare");
+  c.innerHTML="";c.appendChild(el("div","eyebrow","Saved decisions · compare vs carrier ask"));
+  const t=el("table");t.innerHTML="<thead><tr><th>Scenario</th><th>By</th><th class=num>Action</th><th class=num>Δ vs carrier</th><th class=num>Value/yr</th><th>Reason</th></tr></thead>";
+  const tb=el("tbody");const carrier=d.baseline?d.baseline.quoted_change:null;
+  tb.appendChild(el("tr",null,`<td><b>Carrier proposal</b></td><td class=mut>—</td><td class=num>${pct(carrier)}</td><td class=num>—</td><td class=num>—</td><td class=mut>as received</td>`));
+  (d.scenarios||[]).forEach(s=>{tb.appendChild(el("tr",null,`<td>${s.scenario_name} <span class="chip plain">${s.status}</span></td><td class=mut>${(s.created_by||'').split('@')[0]}</td>
+    <td class=num>${pct(s.scenario_action)}</td><td class=num>${carrier!=null?((s.scenario_action-carrier)*100).toFixed(1)+' pts':'—'}</td>
+    <td class="num pos">${usd(s.value_at_stake_annual)}</td><td class=mut>${s.reason||''}</td>`));});
+  t.appendChild(tb);c.appendChild(t);}
+function openModal(){$("#modal").style.display="flex";}
+function closeModal(){$("#modal").style.display="none";}
+async function doSave(){const name=$("#sc_name").value.trim(),reason=$("#sc_reason").value.trim();
+  if(!name||!reason){alert("Name and reason are required.");return;}
+  const r=await api("/api/scenario",{method:"POST",headers:{'Content-Type':'application/json'},body:JSON.stringify({doc_id:STATE.doc.document.doc_id,scenario_name:name,reason,overrides:STATE.overrides})});
+  closeModal();$("#sc_name").value="";$("#sc_reason").value="";alert("Saved "+r.scenario_id+" — "+usd(r.value_at_stake_annual)+"/yr at stake. Retained with audit + lineage.");renderCompare();}
+async function doSummary(){const sb=$("#extra");sb.style.display="block";sb.innerHTML="<div class=eyebrow>Executive summary</div><div class=mut><span class=spin></span> Drafting via Foundation Model API…</div>";
+  const r=await api("/api/summary",{method:"POST",headers:{'Content-Type':'application/json'},body:JSON.stringify({doc_id:STATE.doc.document.doc_id,overrides:STATE.overrides})});
+  sb.innerHTML="<div class=eyebrow>Executive summary · editable</div>";const ta=el("textarea");ta.style.cssText="width:100%;min-height:180px;border:1px solid var(--line2);border-radius:8px;padding:10px;font:inherit";ta.value=r.summary;sb.appendChild(ta);
+  const cp=el("button","ghost","Copy");cp.style.marginTop="8px";cp.onclick=()=>{navigator.clipboard.writeText(ta.value);cp.textContent="Copied ✓";};sb.appendChild(cp);}
+async function doLineage(){const r=await api("/api/lineage/"+STATE.doc.document.doc_id);const sb=$("#extra");sb.style.display="block";
+  const sd=r.source_document||{};sb.innerHTML="<div class=eyebrow>Lineage · how this number is built</div>";
+  const chain=el("div","lin");
+  const nodes=["the number","fn_renewal_buildup"+(r.function.governed?" ✓ governed":""),"2_renewal_inputs v"+r.table_versions['2_renewal_inputs'],"file: "+sd.file_name+" ("+sd.fields_found+"/"+sd.fields_expected+")"];
+  nodes.forEach((n,i)=>{chain.appendChild(el("span","node",n));if(i<nodes.length-1)chain.appendChild(el("span","arr","←"));});
+  sb.appendChild(chain);sb.appendChild(el("div","body","Every displayed action traces to the governed method version, the table version it read, and the source file it came from."));
+  sb.appendChild(dlOriginal(sd));}
+
+// ---------------- BENCHMARKS ----------------
+async function renderBench(){const m=$("#main");m.innerHTML="";const c=el("div","card");
+  c.appendChild(el("div","eyebrow","Accumulation"));c.appendChild(el("h2",null,"Book trend benchmark — derived from your retained decisions"));
+  c.appendChild(explainer("This is not a licensed data feed. Each row is computed live from the renewals your team has negotiated. It shows what your own book says trend really is by carrier and group size, and what challenging the carrier was worth. Padders stand out; fair carriers sit close to book. Click any row to see the retained deals behind it — its lineage."));
+  c.appendChild(howGlyph(8));
+  const rows=await api("/api/benchmarks");const t=el("table");
+  t.innerHTML="<thead><tr><th>Carrier</th><th>Band</th><th class=num>Renewals</th><th class=num>Book trend</th><th class=num>Avg carrier action</th><th class=num>Avg negotiated</th><th class=num>Δ</th><th class=num>Value negotiated</th></tr></thead>";
+  const tb=el("tbody");
+  rows.forEach(r=>{const rich=r.book_trend_median>=0.078,fair=r.book_trend_median<=0.058;const tr=el("tr","row");
+    tr.style.background=rich?"#fffbeb":fair?"#f0fdf4":"";tr.style.cursor="pointer";tr.title="Show the retained deals behind this row";
+    tr.innerHTML=`<td>${r.carrier}${rich?' <span class="flag padder">padder</span>':fair?' <span class="flag fair">fair</span>':''}</td><td class=mut>${r.group_band}</td>
+      <td class=num>${r.renewals_negotiated}</td><td class=num><b>${pct(r.book_trend_median)}</b></td><td class=num>${pct(r.avg_carrier_action)}</td>
+      <td class=num>${pct(r.avg_negotiated_action)}</td><td class=num>${(r.avg_negotiation_delta*100).toFixed(1)} pts</td><td class="num pos">${usd(r.total_value_negotiated)}</td>`;
+    tr.onclick=()=>openBenchmark(r.carrier,r.group_band);tb.appendChild(tr);});
+  t.appendChild(tb);c.appendChild(t);
+  const bd=el("div");bd.id="benchdetail";bd.style.cssText="display:none;margin-top:14px";c.appendChild(bd);
+  m.appendChild(c);}
+async function openBenchmark(carrier,band){
+  const w=$("#benchdetail");w.style.display="block";w.innerHTML='<div class="mut"><span class="spin"></span> loading the retained deals behind '+carrier+' · '+band+'…</div>';
+  const rows=await api("/api/benchmark/scenarios?carrier="+encodeURIComponent(carrier)+"&band="+encodeURIComponent(band)).catch(()=>[]);
+  w.innerHTML="";const c=el("div","card");c.style.borderColor="var(--brand-line)";
+  c.appendChild(el("div","eyebrow","Lineage · "+carrier+" · "+band));
+  c.appendChild(el("div","mut","This benchmark row is computed live from these retained decisions — each traces to its saved scenario and the source document it came from."));
+  const chain=el("div","lin");chain.style.margin="10px 0";["6_book_trend_benchmark",""+rows.length+" retained decisions","5_scenario","1_source_document"].forEach((n,i,a)=>{chain.appendChild(el("span","node",n));if(i<a.length-1)chain.appendChild(el("span","arr","←"));});c.appendChild(chain);
+  if(rows.length){const t=el("table");t.innerHTML="<thead><tr><th>Deal</th><th>Group</th><th class=num>Carrier ask</th><th class=num>Negotiated</th><th class=num>Value/yr</th><th>Reason</th></tr></thead>";
+    const tb=el("tbody");rows.forEach(s=>tb.appendChild(el("tr",null,`<td>${s.scenario_id} <span class="chip plain">${s.status}</span></td><td class=mut>${s.employer_group}</td><td class=num>${pct(s.baseline_action)}</td><td class=num>${pct(s.scenario_action)}</td><td class="num pos">${usd(s.value_at_stake_annual)}</td><td class=mut>${s.reason||''}</td>`)));
+    t.appendChild(tb);c.appendChild(t);}
+  else c.appendChild(el("div","mut","No individual decisions recorded for this cell yet."));
+  w.appendChild(c);}
+
+// ---------------- LEARN (how it works) ----------------
+function howGlyph(n){const a=el("a","howglyph","❓ how does this work?");a.href="javascript:void 0";a.onclick=e=>{e.preventDefault();LEARN_ANCHOR=n;go("learn");};return a;}
+const LEARN_SHORT={1:"Get data in",2:"Verify & trust",3:"Reproduce math",4:"Challenge",5:"Decide & record",6:"Present",7:"Reforecast",8:"Learn across book",9:"Answer questions"};
+let LEARN_CACHE=[];
+const LSVG={
+ 1:'<rect x="6" y="26" width="22" height="18" rx="2"/><line x1="28" y1="30" x2="48" y2="18"/><line x1="28" y1="40" x2="48" y2="52"/><rect x="48" y="10" width="26" height="15" rx="2"/><text x="52" y="21">det</text><rect x="48" y="46" width="26" height="15" rx="2"/><text x="54" y="57">AI</text><line x1="74" y1="18" x2="92" y2="31"/><line x1="74" y1="53" x2="92" y2="40"/><path d="M92 35 l10 -8 l10 8 l-10 8 z"/><line x1="112" y1="31" x2="123" y2="25"/><line x1="112" y1="39" x2="123" y2="47"/><rect x="123" y="17" width="22" height="14" rx="2" stroke="#059669"/><rect x="123" y="41" width="22" height="14" rx="2" stroke="#d97706"/>',
+ 2:'<rect x="6" y="26" width="22" height="18" rx="2"/><line x1="28" y1="35" x2="46" y2="35"/><path d="M46 26 h24 l6 9 l-6 9 h-24 z"/><text x="49" y="38">tmpl</text><line x1="76" y1="35" x2="96" y2="24"/><line x1="76" y1="35" x2="96" y2="48"/><rect x="96" y="16" width="30" height="15" rx="2" stroke="#059669"/><text x="100" y="27">known</text><rect x="96" y="41" width="30" height="15" rx="2" stroke="#d97706"/><text x="102" y="52">hold</text>',
+ 3:'<rect x="6" y="15" width="18" height="10" rx="2"/><rect x="6" y="30" width="18" height="10" rx="2"/><rect x="6" y="45" width="18" height="10" rx="2"/><line x1="24" y1="35" x2="54" y2="35"/><rect x="54" y="22" width="36" height="26" rx="3"/><text x="62" y="39" font-size="11">ƒ()</text><line x1="90" y1="35" x2="110" y2="35"/><text x="114" y="40" font-size="13" stroke="#2563eb">%</text>',
+ 4:'<line x1="22" y1="14" x2="22" y2="56"/><circle cx="22" cy="26" r="4" fill="#fff"/><line x1="48" y1="14" x2="48" y2="56"/><circle cx="48" cy="44" r="4" fill="#fff"/><line x1="74" y1="14" x2="74" y2="56"/><circle cx="74" cy="34" r="4" fill="#fff"/><line x1="106" y1="12" x2="106" y2="58"/><path d="M106 12 h24 l-6 7 l6 7 h-24 z" stroke="#d97706" fill="#fef3c7"/>',
+ 5:'<rect x="12" y="13" width="88" height="13" rx="2"/><rect x="104" y="13" width="18" height="13" rx="2" stroke="#2563eb"/><text x="107" y="23" font-size="7">v1</text><rect x="12" y="30" width="88" height="13" rx="2"/><rect x="104" y="30" width="18" height="13" rx="2" stroke="#2563eb"/><text x="107" y="40" font-size="7">v2</text><rect x="12" y="47" width="88" height="13" rx="2"/><rect x="104" y="47" width="18" height="13" rx="2" stroke="#2563eb"/><text x="107" y="57" font-size="7">v3</text>',
+ 6:'<rect x="8" y="13" width="30" height="44" rx="2"/><line x1="14" y1="24" x2="32" y2="24"/><line x1="14" y1="33" x2="32" y2="33"/><line x1="14" y1="42" x2="32" y2="42"/><rect x="62" y="30" width="14" height="27" rx="1" stroke="#64748b"/><text x="61" y="66" font-size="7">ask</text><rect x="84" y="41" width="14" height="16" rx="1" stroke="#059669"/><text x="83" y="66" font-size="7">pos</text><line x1="112" y1="18" x2="112" y2="57"/><text x="116" y="40" font-size="10">$</text>',
+ 7:'<line x1="8" y1="40" x2="142" y2="40"/><line x1="26" y1="35" x2="26" y2="45"/><line x1="50" y1="35" x2="50" y2="45"/><line x1="74" y1="35" x2="74" y2="45"/><line x1="98" y1="35" x2="98" y2="45"/><circle cx="126" cy="40" r="6" fill="#dbeafe" stroke="#2563eb"/><text x="118" y="58" font-size="7">+new</text>',
+ 8:'<circle cx="16" cy="16" r="3"/><circle cx="16" cy="30" r="3"/><circle cx="16" cy="44" r="3"/><circle cx="16" cy="58" r="3"/><line x1="20" y1="16" x2="92" y2="34"/><line x1="20" y1="30" x2="92" y2="37"/><line x1="20" y1="44" x2="92" y2="40"/><line x1="20" y1="58" x2="92" y2="43"/><rect x="96" y="18" width="16" height="40" rx="1" stroke="#2563eb" fill="#dbeafe"/><text x="94" y="66" font-size="7">bench</text>',
+ 9:'<path d="M8 15 h36 v20 h-22 l-8 8 v-8 h-6 z"/><text x="22" y="29" font-size="10">?</text><line x1="46" y1="27" x2="60" y2="27"/><rect x="60" y="17" width="34" height="22" rx="2"/><text x="65" y="31" font-size="8">SQL</text><line x1="94" y1="27" x2="108" y2="27"/><path d="M112 28 l5 6 l11 -15" stroke="#059669" stroke-width="2"/>',
+};
+function learnSchematic(n){return `<svg width="150" height="70" viewBox="0 0 150 70" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-linecap="round" font-family="ui-sans-serif,system-ui,sans-serif" font-size="8" fill-opacity="1">${LSVG[n]||''}</svg>`;}
+async function renderLearn(){const m=$("#main");m.innerHTML="";
+  const d=await api("/api/learn");LEARN_CACHE=d.cards||[];
+  const c=el("div","card");c.appendChild(el("div","eyebrow","How it works"));c.appendChild(el("h2",null,"The renewal — and how this workbench does each step"));
+  c.appendChild(explainer("Nine things a broker does in a renewal, in order, each mapped to how this workbench does it. Click a step for the plain-language version, then follow the links to the real governed objects behind it. Behind-the-scenes is a click, never a hand-wave."));
+  const groups=[["Trust the data",[1,2]],["Work the renewal",[3,4,5,6]],["Compound the book",[7,8,9]]];
+  let open=LEARN_ANCHOR||(LEARN_CACHE[0]&&LEARN_CACHE[0].n)||1;LEARN_ANCHOR=null;
+  const flow=el("div","jflow");
+  groups.forEach(([gl,ns])=>{const g=el("div","jgroup");g.appendChild(el("div","gl",gl));const jn=el("div","jnodes");
+    ns.forEach((n,i)=>{const b=el("button","jnode"+(n===open?" active":""));b.dataset.n=n;
+      b.innerHTML=`<span class="num">${n}</span><span class="lab">${LEARN_SHORT[n]}</span>`;
+      b.onclick=()=>openLearn(n);jn.appendChild(b);if(i<ns.length-1)jn.appendChild(el("span","jsep","→"));});
+    g.appendChild(jn);flow.appendChild(g);});
+  c.appendChild(flow);
+  const wrap=el("div");wrap.id="lcardwrap";c.appendChild(wrap);m.appendChild(c);
+  openLearn(open);
+}
+function openLearn(n){
+  document.querySelectorAll(".jnode").forEach(b=>b.classList.toggle("active",+b.dataset.n===n));
+  const card=LEARN_CACHE.find(x=>x.n===n);if(!card)return;
+  const w=$("#lcardwrap");w.innerHTML="";
+  const cc=el("div","card");cc.style.cssText="margin-top:14px;border-color:var(--brand-line)";
+  cc.appendChild(el("div","eyebrow","Step "+card.n+" · "+card.group));
+  const grid=el("div","grid2");
+  const left=el("div");
+  const l1=el("div","llayer");l1.innerHTML='<span class="lk">The activity</span>';const a1=el("div",null,card.activity);a1.style.cssText="font-weight:600;font-size:14.5px";l1.appendChild(a1);left.appendChild(l1);
+  const l2=el("div","llayer");l2.innerHTML='<span class="lk">How it\'s done here</span>';l2.appendChild(el("div",null,card.how));left.appendChild(l2);
+  const l3=el("div","llayer");l3.innerHTML='<span class="lk">See it live</span>';
+  (card.links||[]).forEach(lk=>{const a=el("a","assetlink",lk.label+(lk.external?" ↗":" →"));
+    if(lk.external){a.href=lk.url;a.target="_blank";a.rel="noopener";}
+    else{a.href="javascript:void 0";a.onclick=e=>{e.preventDefault();go(lk.view);};}
+    l3.appendChild(a);});
+  left.appendChild(l3);grid.appendChild(left);
+  const right=el("div");right.style.cssText="display:flex;align-items:center;justify-content:center";
+  const sc=el("div","lschem");sc.innerHTML=learnSchematic(n);right.appendChild(sc);grid.appendChild(right);
+  cc.appendChild(grid);w.appendChild(cc);
+}
+
+// ---------------- ASK THE BOOK ----------------
+let GENIE={conv:null,mode:"panel"};
+let GENIE_PENDING=null;
+async function renderAsk(){const m=$("#main");m.innerHTML="";const c=el("div","card");
+  c.appendChild(el("div","eyebrow","Genie"));c.appendChild(el("h2",null,"Ask the book"));
+  c.appendChild(explainer("Natural-language questions answered by a Databricks Genie agent over the governed views and metric views. The generated SQL is shown so the governance-minded can verify it. Two surfaces over the same agent: the workbench panel (in-app, via the Conversation API) or the native Genie experience embedded."));c.appendChild(howGlyph(9));
+  const tog=el("div");tog.style.cssText="display:flex;gap:6px;margin:8px 0 4px";
+  const bP=el("button",GENIE.mode==="panel"?"act":"ghost","Workbench panel");
+  const bN=el("button",GENIE.mode==="native"?"act":"ghost","Native Genie");
+  bP.onclick=()=>{GENIE.mode="panel";renderAsk();};bN.onclick=()=>{GENIE.mode="native";renderAsk();};
+  tog.append(bP,bN);c.appendChild(tog);
+  if(GENIE.mode==="native"){const cfg=await api("/api/config").catch(()=>({}));
+    if(cfg.genie_url){const f=el("iframe","embed");f.src=cfg.genie_url;f.style.height="720px";f.setAttribute("frameborder","0");f.style.marginTop="10px";c.appendChild(f);}
+    else c.appendChild(el("div","banner","Genie space not configured — set HB_GENIE_SPACE_ID."));
+    m.appendChild(c);return;}
+  const ex=el("div");ex.style.marginTop="10px";["What's the average carrier-proposed action for groups over 500 lives?","Which carrier runs richest versus our book trend?","Which months drove claims for Harborview Logistics?","Where is the biggest gap between the carrier ask and our negotiated position?"].forEach(q=>{const b=el("button","chipq",q);b.onclick=()=>{$("#gq").value=q;askGenie();};ex.appendChild(b);});
+  c.appendChild(ex);
+  const box=el("div");box.style.cssText="margin-top:14px;display:flex;gap:8px";const inp=el("input");inp.id="gq";inp.placeholder="Ask a question about the book…";inp.style.cssText="flex:1;padding:10px 12px;border:1px solid var(--line2);border-radius:9px;font:inherit";
+  inp.onkeydown=e=>{if(e.key==="Enter")askGenie();};
+  const b=el("button","act","Ask");b.onclick=askGenie;box.append(inp,b);c.appendChild(box);
+  const out=el("div");out.id="gout";out.style.marginTop="14px";c.appendChild(out);m.appendChild(c);
+  if(GENIE_PENDING){$("#gq").value=GENIE_PENDING;GENIE_PENDING=null;askGenie();}}
+function askFromDashboard(q){GENIE.mode="panel";GENIE_PENDING=q;go("ask");}
+async function genieQuery(q,out){if(!q)return;out.innerHTML='<div class="mut"><span class="spin"></span> Asking Genie…</div>';
+  const r=await api("/api/genie/ask",{method:"POST",headers:{'Content-Type':'application/json'},body:JSON.stringify({question:q,conversation_id:GENIE.conv})}).catch(e=>({error:String(e)}));
+  if(r.conversation_id)GENIE.conv=r.conversation_id;
+  if(r.error){out.innerHTML=`<div class="banner">Genie not available: ${r.error}</div>`;return;}
+  out.innerHTML="";if(r.text)out.appendChild(el("div",null,r.text.replace(/\*\*(.+?)\*\*/g,"<b>$1</b>")));
+  if(r.sql){const dt=el("details");dt.appendChild(el("summary",null,"Show generated SQL"));dt.appendChild(el("pre",null,r.sql));out.appendChild(dt);}
+  if(r.rows&&r.rows.length){const t=el("table");t.style.marginTop="10px";t.innerHTML="<thead><tr>"+Object.keys(r.rows[0]).map(k=>`<th>${k}</th>`).join("")+"</tr></thead>";
+    const tb=el("tbody");r.rows.forEach(row=>tb.appendChild(el("tr",null,Object.values(row).map(v=>`<td>${v}</td>`).join(""))));t.appendChild(tb);out.appendChild(t);}
+  if(!r.text&&!r.sql&&!(r.rows&&r.rows.length))out.innerHTML='<div class="mut">No answer returned — try rephrasing.</div>';}
+async function askGenie(){genieQuery($("#gq").value.trim(), $("#gout"));}
+
+// ---------------- AUDIT ----------------
+async function renderAudit(){const m=$("#main");m.innerHTML="";const c=el("div","card");c.appendChild(el("div","eyebrow","Governance"));c.appendChild(el("h2",null,"Audit trail"));
+  c.appendChild(explainer("Every ingestion, quarantine, sign-off, scenario save and approval is an append-only governed event. Click any deal or document to trace it back to the exact carrier spreadsheet it was built on — and pull that original file straight from the governed Volume."));
+  const rows=await api("/api/audit");const t=el("table");t.innerHTML="<thead><tr><th>When</th><th>Event</th><th>Entity</th><th>Detail</th><th>Actor</th></tr></thead>";
+  const tb=el("tbody");rows.forEach(r=>{const tr=el("tr");
+    tr.appendChild(el("td","mut",r.created_at));
+    tr.appendChild(el("td",null,`<span class="chip plain">${r.event_type}</span>`));
+    const ec=el("td");const eid=r.entity_id||"";
+    if(/^(SCN|DOC)/.test(eid)){const lk=el("a",null,eid);lk.style.cssText="color:var(--brand);cursor:pointer;font-weight:600;text-decoration:underline";lk.title="Trace to original file";lk.onclick=()=>openProvenance(eid);ec.appendChild(lk);}
+    else ec.textContent=eid;
+    tr.appendChild(ec);
+    tr.appendChild(el("td",null,r.detail||''));
+    tr.appendChild(el("td","mut",(r.actor||'').split('@')[0]));
+    tb.appendChild(tr);});
+  t.appendChild(tb);c.appendChild(t);
+  const det=el("div");det.id="auditdetail";det.style.cssText="display:none;margin-top:16px";c.appendChild(det);
+  m.appendChild(c);
+  const foot=el("div","card mut");foot.style.fontSize="12.5px";
+  foot.innerHTML="<b>About this demo.</b> Bricksurance is a fictional carrier group and all carriers, employers and figures here are synthetic. The renewal method is illustrative — the intent is to show the shape of a governed workflow, not to propose a rate. Every screen reads a real governed Unity Catalog table, view or function.";
+  m.appendChild(foot);}
+async function openProvenance(eid){const w=$("#auditdetail");w.style.display="block";w.innerHTML='<div class="mut"><span class="spin"></span> Resolving provenance…</div>';
+  let scn=null,doc=null;
+  if(eid.indexOf("SCN")===0){const r=await api("/api/deal/"+eid).catch(()=>null);if(r&&!r.error){scn=r.scenario;doc=r.document;}}
+  if(!doc&&eid.indexOf("DOC")===0){const r=await api("/api/document/"+eid).catch(()=>null);if(r&&r.document)doc=r.document;}
+  w.innerHTML="";const card=el("div","card");card.appendChild(el("div","eyebrow","Provenance · deal → document → original file"));
+  if(scn){card.appendChild(el("h3",null,(scn.scenario_name||"Decision")+" — "+scn.employer_group));
+    card.appendChild(el("div","mut",scn.carrier+" · "+scn.scenario_id+" · <span class=\"chip plain\">"+scn.status+"</span> · saved "+(scn.created_at||'').slice(0,16)+" · "+usd(scn.value_at_stake_annual)+"/yr at stake"));}
+  else if(doc){card.appendChild(el("h3",null,doc.file_name||eid));
+    card.appendChild(el("div","mut",(doc.carrier||'')+" · "+(doc.employer_group||'')+" · <span class=\"chip plain\">"+(doc.status||'')+"</span>"));}
+  if(!doc){card.appendChild(el("div","banner","No linked source document for this event."));w.appendChild(card);return;}
+  const chain=el("div","lin");chain.style.marginTop="10px";const nodes=[];if(scn)nodes.push("deal "+scn.scenario_id);nodes.push("1_source_document "+doc.doc_id);nodes.push("file: "+(doc.file_name||"—"));
+  nodes.forEach((n,i)=>{chain.appendChild(el("span","node",n));if(i<nodes.length-1)chain.appendChild(el("span","arr","←"));});
+  card.appendChild(chain);card.appendChild(dlOriginal(doc));w.appendChild(card);}
+
+renderNav();go("home");
+</script>
+</body></html>

@@ -1,0 +1,26 @@
+{
+  "version": 2,
+  "data_sources": {
+    "tables": [
+      {
+        "identifier": "lr_dev_aws_us_catalog.hb_renewal.v_source_document_latest"
+      },
+      {
+        "identifier": "lr_dev_aws_us_catalog.hb_renewal.v_2_renewal_inputs_latest"
+      },
+      {
+        "identifier": "lr_dev_aws_us_catalog.hb_renewal.v_1_incurred_claims_latest"
+      },
+      {
+        "identifier": "lr_dev_aws_us_catalog.hb_renewal.6_book_trend_benchmark"
+      },
+      {
+        "identifier": "lr_dev_aws_us_catalog.hb_renewal.mv_renewal_actions"
+      },
+      {
+        "identifier": "lr_dev_aws_us_catalog.hb_renewal.mv_claims_experience"
+      }
+    ]
+  },
+  "instructions": "US H&B medical renewal book (synthetic). A renewal 'action' is the % change in billed premium. avg_carrier_action=carrier proposal; avg_negotiated_action=negotiated position; book_trend_median=firm's own trend benchmark from retained decisions; group_band buckets by covered members."
+}

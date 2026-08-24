@@ -1,0 +1,58 @@
+bundle:
+  name: hb-renewal-workbench
+
+variables:
+  catalog:
+    description: Unity Catalog for the workbench (the single workspace edit point).
+    default: lr_dev_aws_us_catalog
+  schema:
+    default: hb_renewal
+  warehouse_id:
+    default: a3b61648ea4809e3
+
+targets:
+  dev:
+    default: true
+    workspace:
+      host: https://fevm-lr-dev-aws-us.cloud.databricks.com
+      root_path: /Workspace/Shared/.bundle/hb-renewal-workbench
+
+resources:
+  jobs:
+    hb_ingest:
+      name: "[hb-renewal] carrier file ingestion"
+      description: File-arrival ingestion — fingerprint, two-path extract, reconcile, quarantine or append.
+      trigger:
+        file_arrival:
+          url: /Volumes/${var.catalog}/${var.schema}/landing/inbox/
+      tasks:
+        - task_key: ingest
+          spark_python_task:
+            python_file: ./jobs/run_ingest_job.py
+          environment_key: serverless
+      environments:
+        - environment_key: serverless
+          spec:
+            client: "3"
+            dependencies:
+              - openpyxl
+              - openai
+
+    hb_reseed:
+      name: "[hb-renewal] demo reset (reseed)"
+      description: Reseed the schema to the pristine demo state — triggered by the app's Reset button.
+      tasks:
+        - task_key: reseed
+          spark_python_task:
+            python_file: ./jobs/run_reseed_job.py
+          environment_key: serverless
+      environments:
+        - environment_key: serverless
+          spec:
+            client: "3"
+            dependencies:
+              - openpyxl
+              - openai
+      permissions:
+        - service_principal_name: b417c702-dd1f-4ba7-a81c-2459b48fb325
+          level: CAN_MANAGE_RUN

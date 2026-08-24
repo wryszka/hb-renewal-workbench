@@ -1,0 +1,6 @@
+fastapi
+uvicorn[standard]
+databricks-sdk>=0.133.0
+openai
+openpyxl
+python-multipart
