@@ -24,6 +24,18 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "jobs"))
 
 app = FastAPI(title="HB Renewal Workbench")
 
+
+@app.middleware("http")
+async def _no_cache_html(request, call_next):
+    """Never let the browser cache the SPA shell — otherwise a redeploy's new
+    frontend/JS is masked by a stale cached copy (no Cache-Control was set)."""
+    resp = await call_next(request)
+    ct = resp.headers.get("content-type", "")
+    if ct.startswith("text/html") or request.url.path in ("/", "/index.html"):
+        resp.headers["Cache-Control"] = "no-store, max-age=0, must-revalidate"
+    return resp
+
+
 INPUT_COLS = ["member_months", "total_incurred_claims", "months_experience", "current_members",
               "current_total_premium_monthly", "demographic_adjustment", "less_pooled_claims_pmpm",
               "benefit_change", "annual_trend", "months_of_trend", "projected_excess_claims_pmpm",
