@@ -14,3 +14,5 @@ env:
     value: 01f19d63fe03198a95c55b64a81ea535
   - name: HB_DASHBOARD_ID
     value: 01f19d737ef41c468039d889d47d91a9
+  - name: ENABLE_SELFFUNDED
+    value: "true"
